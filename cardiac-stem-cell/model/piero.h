@@ -100,25 +100,45 @@ private:
     Ptr<PieroSocket> b_;
 };
 int CountLines(std::string &name);
-enum PieroBandwidthTraceType{
-    PIERO_TIME_BW,
-    PIERO_BW,
+enum RateTraceType{
+    NONE,
+    TIME_BW,
+    BW,
 };
-enum PieroBandwidthUnit{
+enum RateUnit{
     BW_bps,
     BW_Kbps,
     BW_Mbps,
 };
-class PieroTraceChannel:public Object{
+enum TimeUnit{
+    TIME_MS,
+    TIME_S,
+};
+class StopBroadcast{
 public:
-    PieroTraceChannel(Ptr<PieroSocket> socket,Time stop);
+    class Visitor{
+    public:
+        virtual ~Visitor(){}
+        virtual void OnStop()=0;
+    };
+    StopBroadcast(){}
+    ~StopBroadcast(){}
+    void Fire();
+    void Register(Visitor *visitor);
+private:
+    std::deque<Visitor*> visitors_;
+};
+class PieroTraceChannel:public Object,public StopBroadcast::Visitor{
+public:
+    PieroTraceChannel(Ptr<PieroSocket> socket,StopBroadcast *broadcast);
     ~PieroTraceChannel();
     void SendData(int64_t bytes);
     void SendMessage(PieroPacket *packet);
     void ReadPacketFromSocket(PieroSocket *socket,PieroPacket *packet);
     void SetBandwidthTrace(std::string &name,Time interval,
-    PieroBandwidthTraceType type=PieroBandwidthTraceType::PIERO_BW,
-    PieroBandwidthUnit unit=PieroBandwidthUnit::BW_Kbps);
+    RateTraceType type=RateTraceType::BW,
+    TimeUnit time_unit=TimeUnit::TIME_MS,
+    RateUnit rate_unit=RateUnit::BW_bps);
     void SetSeed(int stream);
     void SetDelay(Time delay) {channel_delay_=delay;}
     typedef Callback<void,PieroTraceChannel *,PieroPacket *> RecvCallback;
@@ -127,16 +147,19 @@ public:
     void SetNotifyWriteCallBack(NotifyWriteCallback cb) {notify_write_=cb;}
     void OnSendTimerEvent();
     void OnBandwidthTimerEvent();
+    Time GetTraceTime(int i) const {return trace_time_[i%2];}
+    DataRate GetTraceRate(int i) const {return trace_rate_[i%2];}
+    bool UpdateBandwidth(uint8_t index);
+    void OnStop() override {running_=false;}
 private:
     void InnerSend();
-    bool UpdateBandwidth(uint8_t index);
     Ptr<PieroSocket> socket_;
-    Time stop_;
     Time trace_time_[2];
     DataRate trace_rate_[2];
     uint8_t index_=0;
-    PieroBandwidthTraceType type_=PieroBandwidthTraceType::PIERO_BW;
-    PieroBandwidthUnit unit_=PieroBandwidthUnit::BW_Kbps;
+    RateTraceType type_=RateTraceType::NONE;
+    int64_t time_unit_=1;
+    int64_t rate_unit_=1;
     int lines_=0;    
     Time channel_delay_;
     RecvCallback notify_read_;
@@ -148,5 +171,6 @@ private:
     std::deque<PieroPacket *> messages_;
     Ptr<UniformRandomVariable> offset_generator_;
     int seq_=0;
+    bool running_=true;
 };
 }

@@ -25,19 +25,23 @@ int CountLines(std::string &name){
 void Split(std::string &line,std::vector<std::string>&numbers){
     int n=line.size();
     int start=-1;
+    int stop=-1;
     for(int i=0;i<n;i++){
-        bool success=isdigit(line[i]);
+        bool success=isdigit(line[i])||(line[i]=='.');
         if(start==-1&&success){
             start=i;
         }
-        success|=(line[i]=='.');
         if((start!=-1)&&(!success)){
-            int end=i;
-            if(end>=start){
-                std::string one=line.substr(start,end);
-                numbers.push_back(one);
-            }
+            stop=i;
+        }
+        if(i==n-1&&success){
+            stop=i;
+        }
+        if(start>=0&&stop>=start){
+            std::string one=line.substr(start,stop);
+            numbers.push_back(one);
             start=-1;
+            stop=-1;
         }
     }
 }
@@ -137,9 +141,30 @@ void PieroBiChannel::SendPacket(PieroSocket *socket,PieroPacket *packet,Time del
         delete packet;
     }
 }
-PieroTraceChannel::PieroTraceChannel(Ptr<PieroSocket> socket,Time stop):
-socket_(socket),stop_(stop),
-channel_delay_(MilliSeconds(100)){
+void StopBroadcast::Fire(){
+    for(auto it=visitors_.begin();it!=visitors_.end();it++){
+        Visitor* element=(*it);
+        element->OnStop();
+    }
+    visitors_.clear();
+}
+void StopBroadcast::Register(Visitor *visitor){
+    bool exist=false;
+    for(auto it=visitors_.begin();it!=visitors_.end();it++){
+        if(visitor==(*it)){
+            exist=true;
+            break;
+        }
+    }
+    if(!exist){
+        visitors_.push_back(visitor);
+    }    
+}
+PieroTraceChannel::PieroTraceChannel(Ptr<PieroSocket> socket,StopBroadcast *broadcast):
+socket_(socket),channel_delay_(MilliSeconds(100)){
+    if(broadcast){
+        broadcast->Register(this);        
+    }
     trace_rate_[0]=DataRate(2000000);
     trace_rate_[1]=trace_rate_[0];
     offset_generator_=CreateObject<UniformRandomVariable>();
@@ -176,17 +201,24 @@ void PieroTraceChannel::ReadPacketFromSocket(PieroSocket *socket,PieroPacket *pa
     }
 }
 void PieroTraceChannel::SetBandwidthTrace(std::string &name,Time interval,
-PieroBandwidthTraceType type,PieroBandwidthUnit unit){
+RateTraceType type,TimeUnit time_unit,RateUnit rate_unit){
     if(bw_trace_.is_open()) {return ;}
     lines_=CountLines(name);
     trace_time_[0]=Time(0);
     trace_time_[1]=interval;
     type_=type;
-    unit_=unit;
     NS_ASSERT(lines_!=0);
     bw_trace_.open(name);
     if(!bw_trace_){
         NS_ASSERT(0);
+    }
+    if(TimeUnit::TIME_S==time_unit){
+        time_unit_=1000;
+    }
+    if(RateUnit::BW_Kbps==rate_unit){
+        rate_unit_=1000;
+    }else if(RateUnit::BW_Mbps==rate_unit){
+        rate_unit_=1000000;
     }
     bool success=UpdateBandwidth(0)&&UpdateBandwidth(1);
     NS_ASSERT(success);
@@ -208,7 +240,7 @@ void PieroTraceChannel::OnBandwidthTimerEvent(){
     trace_time_[0]=trace_time_[1];
     trace_rate_[0]=trace_rate_[1];
     Time now=Simulator::Now();
-    if(now>=stop_){
+    if(!running_){
         return ;
     }
     if(UpdateBandwidth(1)){
@@ -266,24 +298,25 @@ void PieroTraceChannel::InnerSend(){
 }
 bool PieroTraceChannel::UpdateBandwidth(uint8_t index){
     bool ret=false;
-    int64_t unit=1;
-    if(PieroBandwidthUnit::BW_Kbps==unit_){
-        unit=1000;
-    }
-    if(PieroBandwidthUnit::BW_Mbps==unit_){
-        unit=1000000;
-    }
     if(bw_trace_.is_open()&&!bw_trace_.eof()){
         std::string buffer;
         getline(bw_trace_,buffer);
-        if(PieroBandwidthTraceType::PIERO_TIME_BW==type_){
+        if(RateTraceType::TIME_BW==type_){
             std::vector<std::string> numbers;
             Split(buffer,numbers);
-            trace_time_[index]=Seconds(std::stod(numbers[0]));
-            int64_t bps=unit*std::stod(numbers[1]);
+            if(numbers.size()<2){
+                return ret;
+            }
+            int64_t ms=time_unit_*std::stod(numbers[0]);
+            trace_time_[index]=MilliSeconds(ms);
+            double bw=std::stod(numbers[1]);
+            int64_t bps=rate_unit_*bw;
             trace_rate_[index]=DataRate(bps);
         }else{
-            int64_t bps=unit*std::stod(buffer);
+            if(buffer.size()==0){
+                return ret;
+            }
+            int64_t bps=rate_unit_*std::stod(buffer);
             trace_rate_[index]=DataRate(bps);           
         }
         ret=true;

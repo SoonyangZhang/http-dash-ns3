@@ -49,12 +49,12 @@ void ReadSegmentFromFile(std::vector<std::string>& video_log,struct VideoData &v
         video_data.averageBitrate.push_back(average_bitrate);
     }
 }
-PieroDashClient::PieroDashClient(std::vector<std::string> &video_log,std::string &trace_name,int segment_ms,int init_segments,Ptr<PieroSocket> socket,Time start,Time stop){
+PieroDashClient::PieroDashClient(std::vector<std::string> &video_log,std::string &trace_name,int segment_ms,int init_segments,Ptr<PieroSocket> socket,Time start){
     init_segments_=init_segments;
     frames_in_segment_=segment_ms*kFramesPerSecond/1000;
     video_data_.segmentDuration=segment_ms;
     ReadSegmentFromFile(video_log,video_data_);
-    channel_=CreateObject<PieroTraceChannel>(socket,stop);
+    channel_=CreateObject<PieroTraceChannel>(socket,&broadcast_);
     channel_->SetRecvCallback(MakeCallback(&PieroDashClient::RecvPacket,this));
     OpenTrace(trace_name);
     algorithm_.reset(new FestiveAlgorithm(kFestiveTarget,kFestiveHorizon,segment_ms));
@@ -203,6 +203,7 @@ void PieroDashClient::OnPlayBackEvent(){
     if(segments_in_buffer_==0){
         int segment_num=video_data_.representation[0].size();
         if(playback_index_>=segment_num){
+            broadcast_.Fire();
             player_state_=PLAYER_DONE;
             CalculateQoE();
         }else{
