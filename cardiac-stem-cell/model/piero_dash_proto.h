@@ -56,10 +56,7 @@ public:
 class PieroDashServer:public Object{
 public:
     PieroDashServer(Ptr<PieroSocket> socket,StopBroadcast *broadcast);
-    void SetBandwidthTrace(std::string &name,Time interval,
-    RateTraceType type=RateTraceType::BW,
-    TimeUnit time_unit=TimeUnit::TIME_MS,
-    RateUnit rate_unit=RateUnit::BW_bps);
+    void SetBandwidthTrace(DatasetDescriptation &des,Time interval);
     void RecvPacket(PieroTraceChannel *channel,PieroPacket *packet);
 private:
     Ptr<PieroTraceChannel> channel_;

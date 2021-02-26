@@ -114,6 +114,18 @@ enum TimeUnit{
     TIME_MS,
     TIME_S,
 };
+struct DatasetDescriptation{
+    DatasetDescriptation(std::string a1,RateTraceType a2,
+            TimeUnit a3,RateUnit a4)
+:name(a1),
+type(a2),
+time_unit(a3),
+rate_unit(a4){}
+std::string name;
+RateTraceType type;
+TimeUnit time_unit;
+RateUnit rate_unit;
+};
 class StopBroadcast{
 public:
     class Visitor{
@@ -135,10 +147,7 @@ public:
     void SendData(int64_t bytes);
     void SendMessage(PieroPacket *packet);
     void ReadPacketFromSocket(PieroSocket *socket,PieroPacket *packet);
-    void SetBandwidthTrace(std::string &name,Time interval,
-    RateTraceType type=RateTraceType::BW,
-    TimeUnit time_unit=TimeUnit::TIME_MS,
-    RateUnit rate_unit=RateUnit::BW_bps);
+    void SetBandwidthTrace(DatasetDescriptation &des,Time interval);
     void SetSeed(int stream);
     void SetDelay(Time delay) {channel_delay_=delay;}
     typedef Callback<void,PieroTraceChannel *,PieroPacket *> RecvCallback;

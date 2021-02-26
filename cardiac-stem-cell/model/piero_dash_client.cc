@@ -7,6 +7,7 @@
 namespace ns3{
 NS_LOG_COMPONENT_DEFINE("piero_dash_client");
 const uint32_t kContextAny=0xffffffff;
+const float kMUnit=1000000;
 bool has_digit(std::string & line){
     bool ret=false;
     for(size_t i=0;i<line.size();i++){
@@ -131,14 +132,17 @@ void PieroDashClient::OnReadEvent(int bytes){
         throughput_.bytesReceived.push_back(previous);
         segment_counter_++;
         segments_in_buffer_++;
+        Time pause=pause_time_;
         CheckBufferStatus();
-        LogInfomation();
+        pause=pause_time_-pause;
+        LogPlayStatus();
         if(video_data_.representation.size()>0){
             int segment_num=video_data_.representation[0].size();
             if(index_==segment_num){
                 return ;
             }
         }
+        CalculateOneQoE(pause);
         RequestSegment();
     }
 }
@@ -197,7 +201,7 @@ void PieroDashClient::OnPlayBackEvent(){
         if(played_frames_%frames_in_segment_==0){
             segments_in_buffer_--;
             playback_index_++;
-            LogInfomation();            
+            LogPlayStatus();            
         }
     }
     if(segments_in_buffer_==0){
@@ -205,7 +209,7 @@ void PieroDashClient::OnPlayBackEvent(){
         if(playback_index_>=segment_num){
             broadcast_.Fire();
             player_state_=PLAYER_DONE;
-            CalculateQoE();
+            LogQoEInfo();
         }else{
             player_state_=PLAYER_PAUSED;
             pause_start_=now;
@@ -217,13 +221,25 @@ void PieroDashClient::OnPlayBackEvent(){
         player_timer_=Simulator::Schedule(next,&PieroDashClient::OnPlayBackEvent,this);
     }
 }
-void PieroDashClient::LogInfomation(){
-    if(m_trace.is_open()){
+void PieroDashClient::LogPlayStatus(){
+    if(m_play_trace.is_open()){
         Time now=Simulator::Now();
         int wall_time=(now-first_request_time_).GetMilliSeconds();
-        m_trace<<wall_time<<"\t"<<segments_in_buffer_<<"\t"<<quality_<<std::endl;
-        m_trace.flush();        
+        m_play_trace<<wall_time<<"\t"<<segments_in_buffer_<<"\t"<<quality_<<std::endl;
+        m_play_trace.flush();        
     }
+}
+void PieroDashClient::LogQoEInfo(){
+    if(m_reward_trace.is_open()){
+        int i=1;
+        for(auto it=qoe_rebuf_.begin();it!=qoe_rebuf_.end();it++){
+            double qoe=it->first;
+            double rebuf=it->second;
+            m_reward_trace<<i<<"\t"<<qoe<<"\t"<<rebuf<<std::endl;
+            i++;
+        }
+    }
+    CalculateQoE();
 }
 void PieroDashClient::CalculateQoE(){
     double total_qoe=0.0;
@@ -246,32 +262,54 @@ void PieroDashClient::CalculateQoE(){
     double total_instability=0.0;
     n=history_quality_.size();
     for(int i=0;i<n;i++){
-        double a=video_data_.averageBitrate.at(history_quality_.at(i))/1000;
+        double a=video_data_.averageBitrate.at(history_quality_.at(i));
         total_bitrate+=a;
         if(i<n-1){
-            double b=video_data_.averageBitrate.at(history_quality_.at(i+1))/1000;
+            double b=video_data_.averageBitrate.at(history_quality_.at(i+1));
             total_instability+=std::abs(b-a);
         }
     }
-    double time=((pause_time_+startup_time_).GetMilliSeconds())*1.0/1000;
-    total_qoe=total_bitrate/n-total_instability/(n-1)-kRebufPenality*time;
-    if(m_trace.is_open()){
+    float rebuf=pause_time_.GetMilliSeconds()*1.0/1000;
+    total_qoe=total_bitrate/kMUnit-total_instability/kMUnit-kRebufPenality*rebuf;
+    if(m_play_trace.is_open()){
         Time now=Simulator::Now();
         int wall_time=(now-first_request_time_).GetMilliSeconds();
-        m_trace<<wall_time<<"\t"<<average_kbps_1<<"\t"<<average_kbps_2<<"\t"<<total_qoe<<std::endl;        
+        m_play_trace<<wall_time<<"\t"<<average_kbps_1<<"\t"<<average_kbps_2<<"\t"<<rebuf<<"\t"<<total_qoe<<std::endl;        
     }
 }
+void PieroDashClient::CalculateOneQoE(Time pause_time){
+    int n=history_quality_.size();
+    double qoe=0.0;
+    double rebuf=pause_time.GetMilliSeconds()*1.0/1000;
+    auto a=video_data_.averageBitrate.at(history_quality_.at(n-1))/kMUnit;
+    if(1==n){
+        qoe=a/kMUnit-kRebufPenality*rebuf;
+    }else{
+        auto b=video_data_.averageBitrate.at(history_quality_.at(n-2))/kMUnit;
+        qoe=a-std::abs(b-a)-kRebufPenality*rebuf;
+    }
+    qoe_rebuf_.push_back(std::make_pair(qoe,rebuf));
+}
 void PieroDashClient::OpenTrace(std::string &name){
-    if(m_trace.is_open()) {return ;}
-    char buf[FILENAME_MAX];
-    memset(buf,0,FILENAME_MAX);
-    std::string path = std::string (getcwd(buf, FILENAME_MAX)) + "/traces/"
-            +name+"_dash.txt";
-    m_trace.open(path.c_str(), std::fstream::out);
+    if(name.size()==0){
+        return;
+    }
+    {
+        std::string folder_file =name+".txt";
+        m_play_trace.open(folder_file.c_str(), std::fstream::out);
+    }
+    {
+        std::string folder_file =name+"_r.txt";
+        m_reward_trace.open(folder_file.c_str(), std::fstream::out);        
+    }
+
 }
 void PieroDashClient::CloseTrace(){
-    if(m_trace.is_open()){
-        m_trace.close();
+    if(m_play_trace.is_open()){
+        m_play_trace.close();
+    }
+    if(m_reward_trace.is_open()){
+        m_reward_trace.close();
     }
 }
 }

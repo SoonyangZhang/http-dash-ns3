@@ -200,28 +200,29 @@ void PieroTraceChannel::ReadPacketFromSocket(PieroSocket *socket,PieroPacket *pa
         delete packet;
     }
 }
-void PieroTraceChannel::SetBandwidthTrace(std::string &name,Time interval,
-RateTraceType type,TimeUnit time_unit,RateUnit rate_unit){
+void PieroTraceChannel::SetBandwidthTrace(DatasetDescriptation &des,Time interval){
     if(bw_trace_.is_open()) {return ;}
-    lines_=CountLines(name);
+    lines_=CountLines(des.name);
     trace_time_[0]=Time(0);
     trace_time_[1]=interval;
-    type_=type;
+    type_=des.type;
     NS_ASSERT(lines_!=0);
-    bw_trace_.open(name);
+    bw_trace_.open(des.name);
     if(!bw_trace_){
         NS_ASSERT(0);
     }
-    if(TimeUnit::TIME_S==time_unit){
+    if(TimeUnit::TIME_S==des.time_unit){
         time_unit_=1000;
     }
-    if(RateUnit::BW_Kbps==rate_unit){
+    if(RateUnit::BW_Kbps==des.rate_unit){
         rate_unit_=1000;
-    }else if(RateUnit::BW_Mbps==rate_unit){
+    }else if(RateUnit::BW_Mbps==des.rate_unit){
         rate_unit_=1000000;
     }
     bool success=UpdateBandwidth(0)&&UpdateBandwidth(1);
     NS_ASSERT(success);
+    Time temp=trace_time_[1]-trace_time_[0];
+    NS_LOG_INFO("first rate "<<trace_rate_[0]<<" "<<temp.GetMilliSeconds());
     Time next=trace_time_[1]-trace_time_[0];
     bandwidth_timer_=Simulator::Schedule(next,&PieroTraceChannel::OnBandwidthTimerEvent,this);
 }

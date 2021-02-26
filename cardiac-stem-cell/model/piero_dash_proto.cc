@@ -12,9 +12,8 @@ PieroDashServer::PieroDashServer(Ptr<PieroSocket> socket,StopBroadcast *broadcas
     channel_=CreateObject<PieroTraceChannel>(socket,broadcast);
     channel_->SetRecvCallback(MakeCallback(&PieroDashServer::RecvPacket,this));    
 }
-void PieroDashServer::SetBandwidthTrace(std::string &name,Time interval,
-RateTraceType type,TimeUnit time_unit,RateUnit rate_unit){
-    channel_->SetBandwidthTrace(name,interval,type,time_unit,rate_unit);
+void PieroDashServer::SetBandwidthTrace(DatasetDescriptation &des,Time interval){
+    channel_->SetBandwidthTrace(des,interval);
 }
 void PieroDashServer::RecvPacket(PieroTraceChannel *channel,PieroPacket *packet){
     if(packet->extension){

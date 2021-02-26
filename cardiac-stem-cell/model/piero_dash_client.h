@@ -33,8 +33,10 @@ private:
     void SendRequest(int bytes);
     void CheckBufferStatus();
     void OnPlayBackEvent();
-    void LogInfomation();
+    void LogPlayStatus();
+    void LogQoEInfo();
     void CalculateQoE();
+    void CalculateOneQoE(Time pause_time);
     void OpenTrace(std::string &name);
     void CloseTrace();
     Ptr<PieroTraceChannel> channel_;
@@ -43,6 +45,7 @@ private:
     BufferData buffer_data_;
     std::unique_ptr<AdaptationAlgorithm> algorithm_;
     std::deque<int> history_quality_;
+    std::deque<std::pair<double,double>> qoe_rebuf_;
     DashPlayerState player_state_=PLAYER_NOT_STARTED;
     int quality_=0;
     int index_=0;
@@ -61,7 +64,8 @@ private:
     int segment_counter_=0;
     EventId player_timer_;
     EventId request_timer_;
-    std::fstream m_trace;
+    std::fstream m_play_trace;
+    std::fstream m_reward_trace;
     StopBroadcast broadcast_;
-};    
+};
 }
