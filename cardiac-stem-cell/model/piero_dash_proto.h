@@ -9,11 +9,15 @@ const int kThroughputHorizon=5;
 const int kFestiveTarget=20000;
 const int kFestiveHorizon=5;
 const double kRebufPenality=4.3;
+extern const char *g_rl_server_ip;
+extern uint16_t g_rl_server_port;
 struct AlgorithmReply
 {
-  AlgorithmReply():nextQuality(0),nextDownloadDelay(Time(0)){}
+  AlgorithmReply():nextQuality(0),nextDownloadDelay(Time(0)),
+  terminate(false){}
   int nextQuality;
-  Time nextDownloadDelay; 
+  Time nextDownloadDelay;
+  bool terminate;
 };
 struct ThroughputData
 {

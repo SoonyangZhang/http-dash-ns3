@@ -126,7 +126,7 @@ void test_algorithm(std::string &concurrent_id,std::string &agent_id,
     Ptr<PieroBiChannel> channel=CreateObject<PieroBiChannel>();
     Time start=MicroSeconds(10);
     Ptr<PieroDashClient> client=CreateObject<PieroDashClient>(video_log,trace,4000,3,channel->GetSocketA(),start);
-    client->SetAdaptationAlgorithm(algo);
+    client->SetAdaptationAlgorithm(agent_id,algo);
     StopBroadcast *broadcast=client->GetBroadcast();
     Ptr<PieroDashServer> server=CreateObject<PieroDashServer>(channel->GetSocketB(),broadcast);
     server->SetBandwidthTrace(des,Time(0));
@@ -134,23 +134,43 @@ void test_algorithm(std::string &concurrent_id,std::string &agent_id,
     Simulator::Destroy();
 }
 void test_rl_algorithm(std::string &concurrent_id,std::string &agent_id,
-                        bool train=false){
+                      DatasetDescriptation &des,bool train=false){
     std::string result_folder("test");
+    std::string algo("reinforce");
+    std::string video_path("/home/zsy/ns-allinone-3.31/ns-3.31/video_data/");
+    std::string video_name("video_size_");
+    std::string trace;
+    std::string delimit("_");
     bool log=true;
     if(train){
         result_folder=std::string("train");
-        log=false;
+        log=true;
     }
-    std::string trace;
-    std::string delimit("_");
     if(log){
         char buf[FILENAME_MAX];
         memset(buf,0,FILENAME_MAX);        
         std::string parent=std::string (getcwd(buf, FILENAME_MAX));
         std::string folder=parent+ "/traces/"+result_folder;
         makePath(folder);
-        trace=folder+"/"+concurrent_id+delimit+agent_id;
-    }    
+        trace=folder+"/"+concurrent_id+delimit+agent_id+delimit+algo;
+    }
+    int n=6;
+    std::vector<std::string> video_log;
+    for(int i=0;i<n;i++){
+        std::string name=video_path+video_name+std::to_string(i);
+        video_log.push_back(name);
+    }
+    Ptr<PieroBiChannel> channel=CreateObject<PieroBiChannel>();
+    Time start=MicroSeconds(10);
+    Ptr<PieroDashClient> client=CreateObject<PieroDashClient>(video_log,trace,4000,3,channel->GetSocketA(),start);
+    g_rl_server_ip="127.0.0.1";
+    g_rl_server_port=1234;
+    client->SetAdaptationAlgorithm(agent_id,algo);
+    StopBroadcast *broadcast=client->GetBroadcast();
+    Ptr<PieroDashServer> server=CreateObject<PieroDashServer>(channel->GetSocketB(),broadcast);
+    server->SetBandwidthTrace(des,Time(0));
+    Simulator::Run ();
+    Simulator::Destroy();    
 }
 int main(int argc, char *argv[]){
     LogComponentEnable("piero",LOG_LEVEL_INFO);
@@ -189,7 +209,7 @@ int main(int argc, char *argv[]){
         if(train.compare("true")==0){
             is_train=true;
         }
-        test_rl_algorithm(concurrent_id,agent_id,is_train);
+        test_rl_algorithm(concurrent_id,agent_id,another_sample,is_train);
     }else{
         const char *algo[]={"festive","panda","tobasco","osmp","raahs","fdash","sftm","svaa"};
         int n=sizeof(algo)/sizeof(algo[0]);

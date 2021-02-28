@@ -4,6 +4,7 @@
 #include "ns3/log.h"
 #include "piero_dash_client.h"
 #include "piero_dash_algo.h"
+#include "piero_rl_algo.h"
 namespace ns3{
 NS_LOG_COMPONENT_DEFINE("piero_dash_client");
 const uint32_t kContextAny=0xffffffff;
@@ -62,13 +63,14 @@ PieroDashClient::PieroDashClient(std::vector<std::string> &video_log,std::string
     Simulator::ScheduleWithContext(kContextAny,start,MakeEvent(&PieroDashClient::StartApplication,this));
 }
 PieroDashClient::~PieroDashClient(){
+    LogQoEInfo();
     CloseTrace();
 }
 void PieroDashClient::RecvPacket(PieroTraceChannel *channel,PieroPacket *packet){
     OnReadEvent(packet->length);
     delete packet;
 }
-void PieroDashClient::SetAdaptationAlgorithm(std::string &algo){
+void PieroDashClient::SetAdaptationAlgorithm(std::string &agent_id,std::string &algo){
     if(algo.compare("panda")==0){
         algorithm_.reset(new PandaAlgorithm());
     }else if(algo.compare("tobasco")==0){
@@ -83,7 +85,11 @@ void PieroDashClient::SetAdaptationAlgorithm(std::string &algo){
         algorithm_.reset(new SftmAlgorithm());
     }else if(algo.compare("svaa")==0){
         algorithm_.reset(new SvaaAlgorithm());
+    }else if(algo.compare("reinforce")==0){
+        int id=std::stoi(agent_id);
+        algorithm_.reset(new ReinforceAlgorithm(id));
     }
+    
 }
 void PieroDashClient::StartApplication(){
     player_state_=PLAYER_INIT_BUFFERING;
@@ -153,11 +159,21 @@ void PieroDashClient::RequestSegment(){
     history_quality_.push_back(quality_);
     read_bytes_=0;
     segment_bytes_=video_data_.representation[quality_][index_];
-    if(reply.nextDownloadDelay!=Time(0)){
-        request_timer_=Simulator::Schedule(reply.nextDownloadDelay,&PieroDashClient::OnRequestEvent,this);    
+    if(!reply.terminate){
+        if(reply.nextDownloadDelay!=Time(0)){
+            request_timer_=Simulator::Schedule(reply.nextDownloadDelay,&PieroDashClient::OnRequestEvent,this);    
+        }else{
+            OnRequestEvent();
+        }        
     }else{
-        OnRequestEvent();
+        HandleTerminateSignal();
     }
+}
+void PieroDashClient::HandleTerminateSignal(){
+    request_timer_.Cancel();
+    player_timer_.Cancel();
+    broadcast_.Fire();
+    player_state_=PLAYER_DONE;
 }
 void PieroDashClient::OnRequestEvent(){
     if(video_data_.representation.size()>0){
@@ -209,7 +225,6 @@ void PieroDashClient::OnPlayBackEvent(){
         if(playback_index_>=segment_num){
             broadcast_.Fire();
             player_state_=PLAYER_DONE;
-            LogQoEInfo();
         }else{
             player_state_=PLAYER_PAUSED;
             pause_start_=now;

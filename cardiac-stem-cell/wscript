@@ -2,15 +2,16 @@ def build(bld):
     module= bld.create_ns3_module('cardiac-stem-cell')
     module.source = [
         'model/piero.cc',
+        'model/piero_byte_codec.cc',
         'model/piero_dash_algo.cc',
         'model/piero_dash_client.cc',
         'model/piero_dash_proto.cc',
+        'model/piero_rl_algo.cc',
     ]
     headers = bld(features='ns3header')
     headers.module ='cardiac-stem-cell'
     headers.source =[
         'model/piero.h',
-        'model/piero_dash_algo.h',
         'model/piero_dash_client.h',
         'model/piero_dash_proto.h',
     ]
