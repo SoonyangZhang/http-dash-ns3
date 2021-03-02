@@ -47,6 +47,24 @@ class DataReader(object):
             self.pos+=8
             success=True
         return result,success
+    def read_float(self):
+        result=0
+        success=False
+        if self.pos+4<=self.length:
+            temp=self.buffer[self.pos:self.pos+4]
+            result,=struct.unpack("!f",temp)
+            self.pos+=4
+            success=True
+        return result,success
+    def read_double(self):
+        result=0
+        success=False
+        if self.pos+8<=self.length:
+            temp=self.buffer[self.pos:self.pos+8]
+            result,=struct.unpack("!d",temp)
+            self.pos+=8
+            success=True
+        return result,success
     def read_varint(self):
         result=0
         success=False
@@ -121,6 +139,10 @@ class DataWriter(object):
         self.buffer+=struct.pack("!I",v)
     def write_uint64(self,v):
         self.buffer+=struct.pack("!Q",v)
+    def write_float(self,v):
+        self.buffer+=struct.pack("!f",v)
+    def write_double(self,v):
+        self.buffer+=struct.pack("!d",v)
     def write_varint(self,v):
         length=varient_length(v)
         if length>0:
@@ -132,16 +154,17 @@ def byte_codec_test():
     a=1234
     b=4567
     c=12
+    d=8765.4567
     writer.write_uint16(a)
     writer.write_varint(b)
-    writer.write_uint8(c)
-    writer.write_uint64(a)
+    writer.write_float(d)
+    writer.write_double(d)
     reader=DataReader()
     reader.append(writer.content())
     e,_=reader.read_uint16()
     f,_=reader.read_varint()
-    g,_=reader.read_uint8()
-    h,_=reader.read_uint64()
+    g,_=reader.read_float()
+    h,_=reader.read_double()
     print(e)
     print(f)
     print(g)

@@ -70,7 +70,7 @@ void PieroDashClient::RecvPacket(PieroTraceChannel *channel,PieroPacket *packet)
     OnReadEvent(packet->length);
     delete packet;
 }
-void PieroDashClient::SetAdaptationAlgorithm(std::string &agent_id,std::string &algo){
+void PieroDashClient::SetAdaptationAlgorithm(std::string &algo,std::string & group_id,std::string &agent_id){
     if(algo.compare("panda")==0){
         algorithm_.reset(new PandaAlgorithm());
     }else if(algo.compare("tobasco")==0){
@@ -86,8 +86,9 @@ void PieroDashClient::SetAdaptationAlgorithm(std::string &agent_id,std::string &
     }else if(algo.compare("svaa")==0){
         algorithm_.reset(new SvaaAlgorithm());
     }else if(algo.compare("reinforce")==0){
-        int id=std::stoi(agent_id);
-        algorithm_.reset(new ReinforceAlgorithm(id));
+        int gid=std::stoi(group_id);
+        int aid=std::stoi(agent_id);
+        algorithm_.reset(new ReinforceAlgorithm(gid,aid));
     }
     
 }
@@ -142,13 +143,14 @@ void PieroDashClient::OnReadEvent(int bytes){
         CheckBufferStatus();
         pause=pause_time_-pause;
         LogPlayStatus();
+        CalculateOneQoE(pause);
         if(video_data_.representation.size()>0){
             int segment_num=video_data_.representation[0].size();
             if(index_==segment_num){
+                algorithm_->LastSegmentArrive(this);
                 return ;
             }
         }
-        CalculateOneQoE(pause);
         RequestSegment();
     }
 }

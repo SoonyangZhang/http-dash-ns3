@@ -11,6 +11,7 @@ const int kFestiveHorizon=5;
 const double kRebufPenality=4.3;
 extern const char *g_rl_server_ip;
 extern uint16_t g_rl_server_port;
+static volatile bool g_running=true;
 struct AlgorithmReply
 {
   AlgorithmReply():nextQuality(0),nextDownloadDelay(Time(0)),
@@ -56,6 +57,7 @@ class AdaptationAlgorithm{
 public:
     virtual ~AdaptationAlgorithm(){}
     virtual AlgorithmReply GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count)=0;
+    virtual void LastSegmentArrive(PieroDashClient *client){}
 };
 class PieroDashServer:public Object{
 public:

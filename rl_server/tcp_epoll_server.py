@@ -5,11 +5,16 @@ import select
 import errno
 import numpy as np
 import byte_codec as bc
+import piero_abrenv as pabr
+import piero_message as pmsg
 SERVER_ERR_INVAL=-1
 class TcpPeer(object):
-    def __init__(self,conn):
+    def __init__(self,server,conn):
+        self.server=server
         self.conn=conn
+        self.abr=None
         self.buffer=b''
+        self.dead=False
     def incoming_data(self,buffer):
         self.buffer+=buffer
         reader=bc.DataReader()
@@ -17,33 +22,50 @@ class TcpPeer(object):
         all=len(self.buffer)
         sum,success=reader.read_varint()
         remain=b''
+        close=False
         if success:
             if sum<=reader.byte_remain():
                 type,_=reader.read_uint8()
+                last,_=reader.read_uint8()
                 request_id,_=reader.read_uint32()
+                group_id,_=reader.read_uint32()
                 agent_id,_=reader.read_uint32()
                 actions,_=reader.read_uint32()
                 last_bytes,_=reader.read_uint64()
                 time,_=reader.read_uint64()
                 buffer,_=reader.read_uint64()
-                self.request_handle(request_id,agent_id,actions,last_bytes,time,buffer)
+                reward,_=reader.read_double()
+                info=pmsg.RequestInfo(last,request_id,group_id,agent_id,actions,last_bytes,time,buffer,reward)
                 pos=reader.cursor()
                 if pos<all:
                     remain=self.buffer[pos:all]
+                if self.abr is None:
+                    self.abr=self.server.get_abr(group_id,agent_id)
+                if self.abr:
+                    self.abr.handle_request(self,info)
+                else:
+                    self.handle_request(info)
             self.buffer=remain
-            return False
-    def request_handle(self,request_id,agent_id,actions,last_bytes,time_ms,buffer_ms):
-        #print (request_id,buffer_ms)
-        sum=3
-        type=1
-        choice=np.random.randint(0,actions)
-        termimate=0
-        writer=bc.DataWriter()
-        writer.write_varint(sum)
-        writer.write_uint8(type)
-        writer.write_uint8(choice)
-        writer.write_uint8(termimate)
-        self.conn.sendall(writer.content())
+            return close
+    def handle_request(self,info):
+        print (info.group_id,info.agent_id,info.last,info.r)
+        choice=np.random.randint(0,info.actions)
+        terminate=0
+        res=pmsg.ResponceInfo(choice,terminate)
+        self.send_responce(res)
+    def send_responce(self,res):
+        if self.dead is False:
+            sum=7
+            type=1
+            writer=bc.DataWriter()
+            writer.write_varint(sum)
+            writer.write_uint8(type)
+            writer.write_uint8(res.choice)
+            writer.write_uint8(res.terminate)
+            writer.write_uint32(res.downloadDelay)
+            self.conn.sendall(writer.content())
+            if res.terminate:
+                self.dead=True
     def read_event(self):
         close=False
         buffer=b''
@@ -75,9 +97,10 @@ class TcpPeer(object):
         #print("msglen: "+str(length))
         return close
     def close_fd(self):
+        self.dead=True
         self.conn.close()
 class TcpServer():
-    def __init__(self, mode, port,callback):
+    def __init__(self, mode, port):
         self._thread = None
         self._thread_terminate = False
         # localhost -> (127.0.0.1)
@@ -94,8 +117,9 @@ class TcpServer():
         self._socket.setblocking(False)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._socket.bind((self.ip, self.port))
+        self._abrs_lock = threading.Lock()
+        self.abrs={}
         self.peers={}
-        self.callback =callback
         self._socket.listen(128)
         self._epl= select.epoll()
         self._epl.register(self._socket.fileno(),select.EPOLLIN)
@@ -119,21 +143,23 @@ class TcpServer():
             if fd == self._socket.fileno():
                 conn,addr =self._socket.accept()
                 conn.setblocking(False)
-                peer=TcpPeer(conn)
+                peer=TcpPeer(self,conn)
                 self.peers.update({conn.fileno():peer})
                 self._epl.register(conn.fileno(), select.EPOLLIN)
             elif events == select.EPOLLIN:
                 ret=self.peers[fd].read_event()
                 if ret:
                     #print("close")
-                    self._epl.unregister(fd)
-                    self.peers[fd].close_fd()
-                    self.peers.pop(fd)
+                    self._close(fd)
+        for fd in list(self.peers.keys()):
+            if self.peers[fd].dead:
+                self._close(fd)
     def _thread_main(self):
         while True:
+            self.loop_once()
             if self._thread_terminate is True:
+                self.shutdown()
                 break
-            self.loop_once(retry_first_connection=True)
     def _close(self,fd):
         if fd==self._socket.fileno():
             self._epl.unregister(fd)
@@ -142,31 +168,58 @@ class TcpServer():
             self._epl.unregister(fd)
             self.peers[fd].close_fd()
             self.peers.pop(fd)
-    def shut_down(self):
+    def shutdown(self):
         for fd, peer in self.peers.items():
             self._epl.unregister(fd)
             peer.close_fd()
         self.peers.clear()
         self._close(self._socket.fileno())
-def echo_back(conn,buffer):
-    print(buffer.decode('utf-8'))
-    conn.sendall(buffer)
-    return True
+    def get_abr(self,gid,aid):
+        id=gid*2**32+aid
+        env=None
+        self._abrs_lock.acquire()
+        env=self.abrs.get(id)
+        self._abrs_lock.release()
+        return env
+    def register_abr(self,gid,aid,abr):
+        id=gid*2**32+aid
+        self._abrs_lock.acquire()
+        old=self.abrs.get(id)
+        if old is None:
+            self.abrs.update({id:abr})
+        self._abrs_lock.release()
+    def unregister_abr(self,gid,aid):
+        id=gid*2**32+aid
+        self._abrs_lock.acquire()
+        self.abrs.pop(id,None)
+        self._abrs_lock.release()
 Terminate=False
 def signal_handler(signum, frame):
     global Terminate
     Terminate =True
 
 #netstat -tunlp | grep port
+def single_thread():
+    tcp_server=TcpServer("localhost",1234)
+    abr=pabr.AbrEnv(tcp_server,True,0,1,0)
+    while True:
+        tcp_server.loop_once()
+        if Terminate:
+            tcp_server.shutdown()
+            break
+def multi_thread():
+    tcp_server=TcpServer("localhost",1234)
+    tcp_server.loop_start()
+    abr=pabr.AbrEnv(tcp_server,True,0,1,0)
+    while True:
+        abr.process_event()
+        if Terminate:
+            tcp_server.loop_stop()
+            break
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGHUP, signal_handler) # ctrl+c
     signal.signal(signal.SIGTSTP, signal_handler) #ctrl+z
-    echo_server=TcpServer("localhost",1234,echo_back)
-    while True:
-        echo_server.loop_once()
-        if Terminate:
-            echo_server.shut_down()
-            break
-print("stop")
+    multi_thread()
+    print("stop")

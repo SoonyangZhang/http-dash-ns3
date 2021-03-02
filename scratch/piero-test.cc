@@ -1,9 +1,11 @@
+#include <signal.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <algorithm>
 #include <string>
 #include <vector>
 #include <iostream>
+#include <fstream>
 #include <sys/stat.h> // stat
 #include <errno.h>    // errno, ENOENT, EEXIST
 #if defined(_WIN32)
@@ -105,7 +107,7 @@ void getFiles(std::string &cate_dir,std::vector<std::string> &files)
     closedir(dir);
 }
 //https://github.com/USC-NSL/Oboe/blob/master/traces/trace_0.txt
-void test_algorithm(std::string &concurrent_id,std::string &agent_id,
+void test_algorithm(std::string &group_id,std::string &agent_id,
                     DatasetDescriptation &des,std::string &algo,std::string &result_folder){
     std::string video_path("/home/zsy/ns-allinone-3.31/ns-3.31/video_data/");
     std::string video_name("video_size_");
@@ -116,7 +118,7 @@ void test_algorithm(std::string &concurrent_id,std::string &agent_id,
     std::string parent=std::string (getcwd(buf, FILENAME_MAX));
     std::string folder=parent+ "/traces/"+result_folder;
     makePath(folder);
-    trace=folder+"/"+concurrent_id+delimit+agent_id+delimit+algo;
+    trace=folder+"/"+group_id+delimit+agent_id+delimit+algo;
     int n=6;
     std::vector<std::string> video_log;
     for(int i=0;i<n;i++){
@@ -126,14 +128,14 @@ void test_algorithm(std::string &concurrent_id,std::string &agent_id,
     Ptr<PieroBiChannel> channel=CreateObject<PieroBiChannel>();
     Time start=MicroSeconds(10);
     Ptr<PieroDashClient> client=CreateObject<PieroDashClient>(video_log,trace,4000,3,channel->GetSocketA(),start);
-    client->SetAdaptationAlgorithm(agent_id,algo);
+    client->SetAdaptationAlgorithm(algo,group_id,agent_id);
     StopBroadcast *broadcast=client->GetBroadcast();
     Ptr<PieroDashServer> server=CreateObject<PieroDashServer>(channel->GetSocketB(),broadcast);
     server->SetBandwidthTrace(des,Time(0));
     Simulator::Run ();
     Simulator::Destroy();
 }
-void test_rl_algorithm(std::string &concurrent_id,std::string &agent_id,
+void test_rl_algorithm(std::string &group_id,std::string &agent_id,
                       DatasetDescriptation &des,bool train=false){
     std::string result_folder("test");
     std::string algo("reinforce");
@@ -152,7 +154,7 @@ void test_rl_algorithm(std::string &concurrent_id,std::string &agent_id,
         std::string parent=std::string (getcwd(buf, FILENAME_MAX));
         std::string folder=parent+ "/traces/"+result_folder;
         makePath(folder);
-        trace=folder+"/"+concurrent_id+delimit+agent_id+delimit+algo;
+        trace=folder+"/"+group_id+delimit+agent_id+delimit+algo;
     }
     int n=6;
     std::vector<std::string> video_log;
@@ -165,25 +167,48 @@ void test_rl_algorithm(std::string &concurrent_id,std::string &agent_id,
     Ptr<PieroDashClient> client=CreateObject<PieroDashClient>(video_log,trace,4000,3,channel->GetSocketA(),start);
     g_rl_server_ip="127.0.0.1";
     g_rl_server_port=1234;
-    client->SetAdaptationAlgorithm(agent_id,algo);
+    client->SetAdaptationAlgorithm(algo,group_id,agent_id);
     StopBroadcast *broadcast=client->GetBroadcast();
     Ptr<PieroDashServer> server=CreateObject<PieroDashServer>(channel->GetSocketB(),broadcast);
     server->SetBandwidthTrace(des,Time(0));
     Simulator::Run ();
     Simulator::Destroy();    
 }
+void test_signal(std::string &group_id,std::string &agent_id){
+    char buf[FILENAME_MAX];
+    memset(buf,0,FILENAME_MAX);        
+    std::string parent=std::string (getcwd(buf, FILENAME_MAX));
+    std::string delimiter="_";
+    std::string file=parent+ "/traces/"+group_id+delimiter+agent_id+".txt";
+    std::fstream test;
+    test.open(file.c_str(), std::fstream::out);
+    test<<group_id<<"\t"<<agent_id<<std::endl;
+    test.close();
+}
+void signal_exit_handler(int sig)
+{
+    ns3::g_running=false;
+}
 int main(int argc, char *argv[]){
+    signal(SIGTERM, signal_exit_handler);
+    signal(SIGINT, signal_exit_handler);
+    signal(SIGHUP, signal_exit_handler);//ctrl+c
+    signal(SIGTSTP, signal_exit_handler);//ctrl+z       
     LogComponentEnable("piero",LOG_LEVEL_INFO);
+    LogComponentEnable("piero_rl",LOG_LEVEL_INFO);
     CommandLine cmd;
     std::string reinforce("false");
     std::string train("false");
-    std::string concurrent_id("0");
+    std::string group_id("0");
     std::string agent_id("0");
+    std::string bandwith_id("0");
     cmd.AddValue ("rl", "reinfore",reinforce);
     cmd.AddValue ("tr", "train",train);
-    cmd.AddValue ("cu", "concurrent",concurrent_id);
+    cmd.AddValue ("gr", "groupid",group_id);
     cmd.AddValue ("ag", "agentid",agent_id);
+    cmd.AddValue ("bwid", "bandwidthid",bandwith_id);
     cmd.Parse (argc, argv);
+    int bandwidth_index=std::stoi(bandwith_id);
     DatasetDescriptation dataset[]{
         {std::string("/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_traces/"),
         RateTraceType::TIME_BW,TimeUnit::TIME_S,RateUnit::BW_Mbps},
@@ -209,17 +234,19 @@ int main(int argc, char *argv[]){
         if(train.compare("true")==0){
             is_train=true;
         }
-        test_rl_algorithm(concurrent_id,agent_id,another_sample,is_train);
+        test_rl_algorithm(group_id,agent_id,another_sample,is_train);
     }else{
         const char *algo[]={"festive","panda","tobasco","osmp","raahs","fdash","sftm","svaa"};
         int n=sizeof(algo)/sizeof(algo[0]);
         std::string result_folder("tradition");
         for(int i=0;i<n;i++){
             std::string algorithm(algo[i]);
-            test_algorithm(concurrent_id,agent_id,another_sample,
+            test_algorithm(group_id,agent_id,another_sample,
                             algorithm,result_folder);
             std::cout<<i<<std::endl;
         }
     }
+    //printf("start\n");
+    //test_signal(group_id,agent_id);
     return 0;
 }

@@ -16,7 +16,7 @@ public:
     PieroDashClient(std::vector<std::string> &video_log,std::string &trace_name,int segment_ms,int init_segments,Ptr<PieroSocket> socket,Time start);
     ~PieroDashClient();
     void RecvPacket(PieroTraceChannel *channel,PieroPacket *packet);
-    void SetAdaptationAlgorithm(std::string &agent_id,std::string &algo);
+    void SetAdaptationAlgorithm(std::string &algo,std::string & group_id,std::string &agent_id);
     void StartApplication();
     const VideoData & get_video_data() {return video_data_ ;}
     const ThroughputData &get_throughput(){return throughput_;}
@@ -25,7 +25,7 @@ public:
     int  get_played_frames() {return played_frames_;}
     int64_t get_buffer_level_ms();
     int64_t get_buffer_diff_ms();
-    int segments() const {return segment_counter_;}
+    const std::deque<std::pair<double,double>> & get_reward() {return qoe_rebuf_;}
     StopBroadcast* GetBroadcast() {return &broadcast_;}
 private:
     void HandleTerminateSignal();
