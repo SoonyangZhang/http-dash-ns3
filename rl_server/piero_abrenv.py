@@ -6,8 +6,6 @@ import numpy as np
 import socket
 import byte_codec as bc
 import piero_message as pmsg
-S_INFO = 2
-S_LEN = 2  # take how many frames in the past
 BUFFER_NORM_FACTOR = 10.0 #seconds
 Mbps=1000000.0
 def count_files(path):
@@ -17,16 +15,16 @@ def count_files(path):
                 num_files_rec += 1
     return num_files_rec
 class AbrEnv(object):
-    def __init__(self,server,is_train,group_id,agent_id,bandwidth_id):
+    def __init__(self,server,state_dim,is_train,group_id,agent_id,bandwidth_id):
         self.server=server
+        self.s_dim=state_dim
         self.is_train=is_train
         self.group_id=group_id
         self.agent_id=agent_id
         self.bandwidth_id=bandwidth_id
-        self.state = np.zeros((S_INFO, S_LEN),dtype=np.float32)
+        self.state = np.zeros((self.s_dim[0], self.s_dim[1]),dtype=np.float32)
         self.last_info=None
         self.peerQ=deque()
-        self.eventQ=deque()
         self.msgQ_lock=threading.Lock()
         self.msgQ=deque()
         self.server.register_abr(group_id,agent_id,self)
@@ -38,7 +36,7 @@ class AbrEnv(object):
         self.agent_id=agent_id
         self.bandwidth_id=bandwidth_id
         self._terminate_peer()
-        self.state = np.zeros((S_INFO, S_LEN),dtype=np.float32)
+        self.state = np.zeros((self.s_dim[0], self.s_dim[1]),dtype=np.float32)
         self.server.register_abr(group_id,agent_id,self)
         self.create_ns3_client()
     def create_ns3_client(self):
@@ -66,13 +64,13 @@ class AbrEnv(object):
     def process_event(self):
         update=False
         last=False
+        peer=None
+        info=None
         self.msgQ_lock.acquire()
         if len(self.msgQ):
             peer,info=self.msgQ.popleft()
-            self.eventQ.append([peer,info])
         self.msgQ_lock.release()
-        if len(self.eventQ):
-            peer,info=self.eventQ.popleft()
+        if peer and info:
             self.peerQ.append(peer)
             if info.request_id==0:
                 self._random_choice(info.actions,0)

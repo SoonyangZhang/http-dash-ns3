@@ -5,9 +5,8 @@ import select
 import errno
 import numpy as np
 import byte_codec as bc
-import piero_abrenv as pabr
+import rl_agent as ra
 import piero_message as pmsg
-SERVER_ERR_INVAL=-1
 class TcpPeer(object):
     def __init__(self,server,conn):
         self.server=server
@@ -132,7 +131,7 @@ class TcpServer():
         self._thread.start()
     def loop_stop(self, force=False):
         if self._thread is None:
-            return SERVER_ERR_INVAL
+            return
         self._thread_terminate = True
         if threading.current_thread() != self._thread:
             self._thread.join()
@@ -200,13 +199,12 @@ def signal_handler(signum, frame):
 def multi_thread():
     tcp_server=TcpServer("localhost",1234)
     tcp_server.loop_start()
-    abr=pabr.AbrEnv(tcp_server,True,0,1,0)
+    agent=ra.Agent(tcp_server,1,True)
+    agent.loop_start()
     while True:
-        update,last=abr.process_event()
-        if update:
-            abr.random_choice()
         if Terminate:
             tcp_server.loop_stop()
+            agent.loop_stop()
             break
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
