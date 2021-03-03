@@ -1,5 +1,3 @@
-# cannot pickle '_thread.lock' object
-#https://stackoverflow.com/questions/62228507/multiprocessing-with-queue-typeerror-cant-pickle-thread-lock-objects
 import os
 import threading
 import subprocess ,signal
@@ -8,10 +6,10 @@ import numpy as np
 import socket
 import byte_codec as bc
 import piero_message as pmsg
-Terminate=False
-def signal_handler(signum, frame):
-    global Terminate
-    Terminate =True
+S_INFO = 2
+S_LEN = 2  # take how many frames in the past
+BUFFER_NORM_FACTOR = 10.0 #seconds
+Mbps=1000000.0
 def count_files(path):
     num_files_rec=0
     for root,dirs,files in os.walk(path):
@@ -25,6 +23,10 @@ class AbrEnv(object):
         self.group_id=group_id
         self.agent_id=agent_id
         self.bandwidth_id=bandwidth_id
+        self.state = np.zeros((S_INFO, S_LEN),dtype=np.float32)
+        self.last_info=None
+        self.peerQ=deque()
+        self.eventQ=deque()
         self.msgQ_lock=threading.Lock()
         self.msgQ=deque()
         self.server.register_abr(group_id,agent_id,self)
@@ -35,6 +37,8 @@ class AbrEnv(object):
         self.group_id=group_id
         self.agent_id=agent_id
         self.bandwidth_id=bandwidth_id
+        self._terminate_peer()
+        self.state = np.zeros((S_INFO, S_LEN),dtype=np.float32)
         self.server.register_abr(group_id,agent_id,self)
         self.create_ns3_client()
     def create_ns3_client(self):
@@ -51,25 +55,68 @@ class AbrEnv(object):
         client.sendall(writer.content())
         client.close()
     def handle_request(self,peer,info):
-        self.msgQ_lock.acquire()
-        self.msgQ.append([peer,info])
-        self.msgQ_lock.release()
-    def _handle_request(self,peer,info):
-        print ("abr: ",info.request_id,info.last,info.r)
-        choice=np.random.randint(0,info.actions)
-        terminate=0
-        if self.group_id!=info.group_id or self.agent_id!=info.agent_id:
-            terminate=1
-        res=pmsg.ResponceInfo(choice,terminate)
-        peer.send_responce(res)
+        if self.group_id==info.group_id and self.agent_id==info.agent_id:
+            self.msgQ_lock.acquire()
+            self.msgQ.append([peer,info])
+            self.msgQ_lock.release()
+        else:
+            choice=np.random.randint(0,info.actions)
+            res=pmsg.ResponceInfo(choice,1)
+            peer.send_responce(res)
     def process_event(self):
-        list=[]
+        update=False
+        last=False
         self.msgQ_lock.acquire()
+        if len(self.msgQ):
+            peer,info=self.msgQ.popleft()
+            self.eventQ.append([peer,info])
+        self.msgQ_lock.release()
+        if len(self.eventQ):
+            peer,info=self.eventQ.popleft()
+            self.peerQ.append(peer)
+            if info.request_id==0:
+                self._random_choice(info.actions,0)
+                self._update_state(info)
+                update=False
+            else:
+                self._update_state(info)
+                update=True
+                if info.last:
+                    last=True
+        return update,last
+    def _terminate_peer(self):
+        list=[]
         while len(self.msgQ):
             peer,info=self.msgQ.popleft()
             list.append([peer,info])
         self.msgQ_lock.release()
-        for i in range (len(list)):
+        for i in range(len(list)):
             peer,info=list[i]
-            if peer:
-                self._handle_request(peer,info)
+            choice=np.random.randint(0,info.actions)
+            res=pmsg.ResponceInfo(choice,1)
+            peer.send_responce(res)
+    def _update_state(self,info):
+        self.last_info=info
+        throughput=0.0
+        buffer_s=1.0*info.buffer/1000.0/BUFFER_NORM_FACTOR
+        if info.time>0:
+            throughput=float(info.last_bytes*8*1000.0)/info.time
+            throughput=throughput/Mbps
+        state = np.roll(self.state, -1, axis=1)
+        state[0,-1]=throughput
+        state[1,-1]=buffer_s
+        self.state = state
+        print("abr ",info.last,info.r,throughput)
+    def _random_choice(self,actions,terminate):
+        choice=np.random.randint(0,actions)
+        self.step(choice,terminate)
+    def step(self,choice,terminate):
+        if len(self.peerQ):
+            peer=self.peerQ.popleft()
+            res=pmsg.ResponceInfo(choice,terminate)
+            peer.send_responce(res)
+    def get_state_reward(self):
+        return self.state,self.last_info.r
+    def random_choice(self):
+        self._random_choice(self.last_info.actions,0)
+    

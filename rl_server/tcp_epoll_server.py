@@ -197,22 +197,14 @@ Terminate=False
 def signal_handler(signum, frame):
     global Terminate
     Terminate =True
-
-#netstat -tunlp | grep port
-def single_thread():
-    tcp_server=TcpServer("localhost",1234)
-    abr=pabr.AbrEnv(tcp_server,True,0,1,0)
-    while True:
-        tcp_server.loop_once()
-        if Terminate:
-            tcp_server.shutdown()
-            break
 def multi_thread():
     tcp_server=TcpServer("localhost",1234)
     tcp_server.loop_start()
     abr=pabr.AbrEnv(tcp_server,True,0,1,0)
     while True:
-        abr.process_event()
+        update,last=abr.process_event()
+        if update:
+            abr.random_choice()
         if Terminate:
             tcp_server.loop_stop()
             break
