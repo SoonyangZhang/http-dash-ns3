@@ -3,7 +3,7 @@ import numpy as np
 import os
 import argparse
 import tflearn
-FEATURE_NUM =1
+FEATURE_NUM =128
 ACTION_EPS = 1e-4
 GAMMA = 0.99
 def add_batch_dimension(data,batch=1):

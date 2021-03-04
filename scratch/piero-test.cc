@@ -13,8 +13,10 @@
 #endif
 #include "ns3/core-module.h"
 #include "ns3/cardiac-stem-cell-module.h"
+#include "ns3/log.h"
 using namespace ns3;
 namespace ns3{
+NS_LOG_COMPONENT_DEFINE("piero-test");
 bool compare(const DatasetDescriptation& t1, const DatasetDescriptation & t2) {
     return t1.name<t2.name;
 }
@@ -107,10 +109,8 @@ void getFiles(std::string &cate_dir,std::vector<std::string> &files)
     closedir(dir);
 }
 //https://github.com/USC-NSL/Oboe/blob/master/traces/trace_0.txt
-void test_algorithm(std::string &group_id,std::string &agent_id,
+void test_algorithm(std::vector<std::string> &video_log,std::string &group_id,std::string &agent_id,
                     DatasetDescriptation &des,std::string &algo,std::string &result_folder){
-    std::string video_path("/home/zsy/ns-allinone-3.31/ns-3.31/video_data/");
-    std::string video_name("video_size_");
     std::string trace;
     std::string delimit("_");
     char buf[FILENAME_MAX];
@@ -119,12 +119,6 @@ void test_algorithm(std::string &group_id,std::string &agent_id,
     std::string folder=parent+ "/traces/"+result_folder;
     makePath(folder);
     trace=folder+"/"+group_id+delimit+agent_id+delimit+algo;
-    int n=6;
-    std::vector<std::string> video_log;
-    for(int i=0;i<n;i++){
-        std::string name=video_path+video_name+std::to_string(i);
-        video_log.push_back(name);
-    }
     Ptr<PieroBiChannel> channel=CreateObject<PieroBiChannel>();
     Time start=MicroSeconds(10);
     Ptr<PieroDashClient> client=CreateObject<PieroDashClient>(video_log,trace,4000,3,channel->GetSocketA(),start);
@@ -135,18 +129,16 @@ void test_algorithm(std::string &group_id,std::string &agent_id,
     Simulator::Run ();
     Simulator::Destroy();
 }
-void test_rl_algorithm(std::string &group_id,std::string &agent_id,
+void test_rl_algorithm(std::vector<std::string> &video_log,std::string &group_id,std::string &agent_id,
                       DatasetDescriptation &des,bool train=false){
     std::string result_folder("test");
     std::string algo("reinforce");
-    std::string video_path("/home/zsy/ns-allinone-3.31/ns-3.31/video_data/");
-    std::string video_name("video_size_");
     std::string trace;
     std::string delimit("_");
     bool log=true;
     if(train){
         result_folder=std::string("train");
-        log=true;
+        log=false;
     }
     if(log){
         char buf[FILENAME_MAX];
@@ -155,12 +147,6 @@ void test_rl_algorithm(std::string &group_id,std::string &agent_id,
         std::string folder=parent+ "/traces/"+result_folder;
         makePath(folder);
         trace=folder+"/"+group_id+delimit+agent_id+delimit+algo;
-    }
-    int n=6;
-    std::vector<std::string> video_log;
-    for(int i=0;i<n;i++){
-        std::string name=video_path+video_name+std::to_string(i);
-        video_log.push_back(name);
     }
     Ptr<PieroBiChannel> channel=CreateObject<PieroBiChannel>();
     Time start=MicroSeconds(10);
@@ -194,8 +180,9 @@ int main(int argc, char *argv[]){
     signal(SIGINT, signal_exit_handler);
     signal(SIGHUP, signal_exit_handler);//ctrl+c
     signal(SIGTSTP, signal_exit_handler);//ctrl+z       
-    LogComponentEnable("piero",LOG_LEVEL_INFO);
-    LogComponentEnable("piero_rl",LOG_LEVEL_INFO);
+    //LogComponentEnable("piero",LOG_LEVEL_INFO);
+    //LogComponentEnable("piero_rl",LOG_LEVEL_INFO);
+    LogComponentEnable("piero-test",LOG_LEVEL_INFO);
     CommandLine cmd;
     std::string reinforce("false");
     std::string train("false");
@@ -208,6 +195,15 @@ int main(int argc, char *argv[]){
     cmd.AddValue ("ag", "agentid",agent_id);
     cmd.AddValue ("bwid", "bandwidthid",bandwith_id);
     cmd.Parse (argc, argv);
+    std::string video_path("/home/zsy/ns-allinone-3.31/ns-3.31/video_data/");
+    std::string video_name("video_size_");
+    int n=6;
+    std::vector<std::string> video_log;
+    for(int i=0;i<n;i++){
+        std::string name=video_path+video_name+std::to_string(i);
+        video_log.push_back(name);
+    }
+    NS_LOG_INFO("start "<<group_id<<" "<<agent_id);
     int bandwidth_index=std::stoi(bandwith_id);
     DatasetDescriptation dataset[]{
         {std::string("/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_traces/"),
@@ -226,7 +222,7 @@ int main(int argc, char *argv[]){
         }
     }
     std::sort(bw_traces.begin(), bw_traces.end(),compare); 
-    std::cout<<"dataset: "<<bw_traces.size()<<std::endl;
+    //std::cout<<"dataset: "<<bw_traces.size()<<std::endl;
     std::string name="/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/trace_0.txt";
     DatasetDescriptation another_sample(name,RateTraceType::TIME_BW,TimeUnit::TIME_MS,RateUnit::BW_Kbps);
     if(reinforce.compare("true")==0){
@@ -234,19 +230,19 @@ int main(int argc, char *argv[]){
         if(train.compare("true")==0){
             is_train=true;
         }
-        test_rl_algorithm(group_id,agent_id,another_sample,is_train);
+        test_rl_algorithm(video_log,group_id,agent_id,another_sample,is_train);
     }else{
         const char *algo[]={"festive","panda","tobasco","osmp","raahs","fdash","sftm","svaa"};
         int n=sizeof(algo)/sizeof(algo[0]);
         std::string result_folder("tradition");
         for(int i=0;i<n;i++){
             std::string algorithm(algo[i]);
-            test_algorithm(group_id,agent_id,another_sample,
+            test_algorithm(video_log,group_id,agent_id,another_sample,
                             algorithm,result_folder);
             std::cout<<i<<std::endl;
         }
     }
-    //printf("start\n");
     //test_signal(group_id,agent_id);
+    NS_LOG_INFO("stop "<<group_id<<" "<<agent_id);
     return 0;
 }

@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <errno.h>   // for errno and strerror_r
-#include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -21,30 +20,10 @@ enum MessageType{
     RL_REQUEST,
     RL_RESPONSE,
 };
-void set_nonblocking(int fd) {
-  int flags = fcntl(fd, F_GETFL, 0);
-  if (flags == -1) {
-    int saved_errno = errno;
-    char buf[kBufferSize];
-    strerror_r(saved_errno, buf, sizeof(buf));
-    printf("%s,%s\n",__FUNCTION__,buf);
-  }
-  if (!(flags & O_NONBLOCK)) {
-    //int saved_flags = flags;
-    flags = fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-    if (flags == -1) {
-      // bad.
-        int saved_errno = errno;
-        char buf[kBufferSize];
-        strerror_r(saved_errno, buf, sizeof(buf));
-        printf("%s,%s\n",__FUNCTION__,buf);
-    }
-  }
-}
 ReinforceAlgorithm::ReinforceAlgorithm(int group_id,int agent_id):
 group_id_(group_id),
 agent_id_(agent_id){
-    printf("%s:%d\n",g_rl_server_ip,g_rl_server_port);
+    NS_LOG_INFO(g_rl_server_ip<<":"<<g_rl_server_port);
     struct sockaddr_in servaddr;
     // assign IP, PORT 
     servaddr.sin_family = AF_INET; 
@@ -59,9 +38,9 @@ agent_id_(agent_id){
         CloseFd();
         return ; 
     }
-    if(sockfd_>0){
+    /*if(sockfd_>0){
         set_nonblocking(sockfd_);
-    }
+    }*/
 }
 ReinforceAlgorithm::~ReinforceAlgorithm(){
     CloseFd();
@@ -150,7 +129,7 @@ void ReinforceAlgorithm::GetReply(AlgorithmReply &reply){
     uint8_t terminate=0;
     uint32_t next_ms=0;
     bool full=false;
-    while(g_running){
+    while(true){
         n =read(sockfd_, buffer+offset,kBufferSize-offset);
         if (n>0){
             offset+=n;
@@ -161,10 +140,6 @@ void ReinforceAlgorithm::GetReply(AlgorithmReply &reply){
                     full=true;
                     break;
                 }
-            }
-        }else if(n<0){
-            if(errno==EAGAIN){
-                continue;
             }
         }else{
             break;
@@ -179,7 +154,7 @@ void ReinforceAlgorithm::GetReply(AlgorithmReply &reply){
     if(success&&full){
         reply.nextQuality=action;
         reply.nextDownloadDelay=MilliSeconds(next_ms);
-        NS_LOG_INFO("quality "<<(int)action);
+        NS_LOG_INFO(group_id_<<" "<<agent_id_<<" "<<request_id_<<" "<<(int)action);
         if(terminate){
             reply.terminate=true;
         }

@@ -57,6 +57,7 @@ PieroDashClient::PieroDashClient(std::vector<std::string> &video_log,std::string
     video_data_.segmentDuration=segment_ms;
     ReadSegmentFromFile(video_log,video_data_);
     channel_=CreateObject<PieroTraceChannel>(socket,&broadcast_);
+    channel_->SetSeed(12321);
     channel_->SetRecvCallback(MakeCallback(&PieroDashClient::RecvPacket,this));
     OpenTrace(trace_name);
     algorithm_.reset(new FestiveAlgorithm(kFestiveTarget,kFestiveHorizon,segment_ms));

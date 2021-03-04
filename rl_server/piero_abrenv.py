@@ -15,30 +15,42 @@ def count_files(path):
                 num_files_rec += 1
     return num_files_rec
 class AbrEnv(object):
-    def __init__(self,server,state_dim,is_train,group_id,agent_id,bandwidth_id):
+    def __init__(self,server,state_dim):
         self.server=server
         self.s_dim=state_dim
-        self.is_train=is_train
-        self.group_id=group_id
-        self.agent_id=agent_id
-        self.bandwidth_id=bandwidth_id
+        self.is_train=False
+        self.group_id=0
+        self.agent_id=0
+        self.bandwidth_id=0
         self.state = np.zeros((self.s_dim[0], self.s_dim[1]),dtype=np.float32)
         self.last_info=None
         self.peerQ=deque()
         self.msgQ_lock=threading.Lock()
         self.msgQ=deque()
-        self.server.register_abr(group_id,agent_id,self)
-        self.create_ns3_client()
     def reset(self,is_train,group_id,agent_id,bandwidth_id):
-        self.server.unregister_abr(group_id,agent_id)
+        self.server.unregister_abr(self.group_id,self.agent_id)
         self.is_train=is_train
         self.group_id=group_id
         self.agent_id=agent_id
         self.bandwidth_id=bandwidth_id
         self._terminate_peer()
         self.state = np.zeros((self.s_dim[0], self.s_dim[1]),dtype=np.float32)
-        self.server.register_abr(group_id,agent_id,self)
+        self.last_info=None
+        self.peerQ=deque()
+        self.msgQ=deque()
+        self.server.register_abr(self.group_id,self.agent_id,self)
         self.create_ns3_client()
+    def stop(self):
+        self.server.unregister_abr(self.group_id,self.agent_id)
+        self.is_train=False
+        self.group_id=0
+        self.agent_id=0
+        self.bandwidth_id=0
+        self._terminate_peer()
+        self.state = np.zeros((self.s_dim[0], self.s_dim[1]),dtype=np.float32)
+        self.last_info=None
+        self.peerQ=deque()
+        self.msgQ=deque()
     def create_ns3_client(self):
         writer=bc.DataWriter()
         if self.is_train:
@@ -75,7 +87,6 @@ class AbrEnv(object):
             if info.request_id==0:
                 self._random_choice(info.actions,0)
                 self._update_state(info)
-                update=False
             else:
                 self._update_state(info)
                 update=True
@@ -84,6 +95,7 @@ class AbrEnv(object):
         return update,last
     def _terminate_peer(self):
         list=[]
+        self.msgQ_lock.acquire()
         while len(self.msgQ):
             peer,info=self.msgQ.popleft()
             list.append([peer,info])
@@ -104,7 +116,7 @@ class AbrEnv(object):
         state[0,-1]=throughput
         state[1,-1]=buffer_s
         self.state = state
-        print("abr ",info.last,info.r,throughput)
+        #print("abr ",info.request_id,info.last,info.r,throughput)
     def _random_choice(self,actions,terminate):
         choice=np.random.randint(0,actions)
         self.step(choice,terminate)

@@ -1,5 +1,6 @@
 import signal, os
 import threading
+import multiprocessing as mp
 import socket
 import select
 import errno
@@ -7,6 +8,7 @@ import numpy as np
 import byte_codec as bc
 import rl_agent as ra
 import piero_message as pmsg
+import file_op as fp
 class TcpPeer(object):
     def __init__(self,server,conn):
         self.server=server
@@ -14,6 +16,8 @@ class TcpPeer(object):
         self.abr=None
         self.buffer=b''
         self.dead=False
+    def __del__(self):
+        pass
     def incoming_data(self,buffer):
         self.buffer+=buffer
         reader=bc.DataReader()
@@ -196,20 +200,57 @@ Terminate=False
 def signal_handler(signum, frame):
     global Terminate
     Terminate =True
-def multi_thread():
+def multi_thread(num_agents,start,stop,files):
     tcp_server=TcpServer("localhost",1234)
     tcp_server.loop_start()
-    agent=ra.Agent(tcp_server,1,True)
-    agent.loop_start()
+    net_params_queues = []
+    exp_queues = []
+    agents=[]
+    for i in range(num_agents):
+        net_params_queues.append(mp.Queue(1))
+        exp_queues.append(mp.Queue(1))
+    coordinator=ra.CentralAgent(num_agents,start,stop,net_params_queues,exp_queues)
+    coordinator.loop_start()
+    for i in range(num_agents):
+        agent=ra.Agent(files[i],tcp_server,i+1,start,stop,True,net_params_queues[i],exp_queues[i])
+        agents.append(agent)
+        agent.loop_start()
     while True:
         if Terminate:
             tcp_server.loop_stop()
-            agent.loop_stop()
+            for i in range(len(agents)):
+                agents[i].loop_stop()
             break
+        if coordinator.peek_done():
+            tcp_server.loop_stop()
+            for i in range(len(agents)):
+                agents[i].loop_stop()
+            break
+def start_train():
+    NUM_AGENTS=8
+    TRAIN_EPOCH =1000
+    train_record_dir="train_record/"
+    model_dir="model_data/"
+    fp.remove_dir(model_dir)
+    fp.mkdir(train_record_dir)
+    files=[]
+    delimiter="_"
+    span=100
+    round=int(TRAIN_EPOCH/span)
+    for i in range(NUM_AGENTS):
+        name=train_record_dir+"train"+delimiter+str(i+1)+".txt"
+        fout=open(name,'w')
+        files.append(fout)
+    for i in range(round):
+        start=i*span
+        stop=(i+1)*span
+        multi_thread(NUM_AGENTS,start,stop,files)
+    for i in range(len(files)):
+        files[i].close()
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGHUP, signal_handler) # ctrl+c
     signal.signal(signal.SIGTSTP, signal_handler) #ctrl+z
-    multi_thread()
+    start_train()
     print("stop")

@@ -113,9 +113,9 @@ class TcpServer:
         else:
             train="false"
         cmd=prefix_cmd%(train,str(group_id),str(agent_id),str(bandwith_id))
-        p= subprocess.Popen(cmd,shell = True,stdout=subprocess.PIPE)
+        p= subprocess.Popen(cmd,shell = True)#,stdout=subprocess.PIPE
         self.ns3_process.update({id(p):p})
-        time.sleep(0.05)
+        time.sleep(0.5)
 Terminate=False
 def signal_handler(signum, frame):
     global Terminate
