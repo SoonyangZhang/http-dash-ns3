@@ -8,6 +8,7 @@ import byte_codec as bc
 import piero_message as pmsg
 BUFFER_NORM_FACTOR = 10.0 #seconds
 Mbps=1000000.0
+RL_MESSAGE_LABEL=0x00
 def count_files(path):
     num_files_rec=0
     for root,dirs,files in os.walk(path):
@@ -53,6 +54,7 @@ class AbrEnv(object):
         self.msgQ=deque()
     def create_ns3_client(self):
         writer=bc.DataWriter()
+        writer.write_uint8(RL_MESSAGE_LABEL)
         if self.is_train:
             writer.write_uint8(1)
         else:

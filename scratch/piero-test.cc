@@ -160,28 +160,19 @@ void test_rl_algorithm(std::vector<std::string> &video_log,std::string &group_id
     Simulator::Run ();
     Simulator::Destroy();    
 }
-void test_signal(std::string &group_id,std::string &agent_id){
-    char buf[FILENAME_MAX];
-    memset(buf,0,FILENAME_MAX);        
-    std::string parent=std::string (getcwd(buf, FILENAME_MAX));
-    std::string delimiter="_";
-    std::string file=parent+ "/traces/"+group_id+delimiter+agent_id+".txt";
-    std::fstream test;
-    test.open(file.c_str(), std::fstream::out);
-    test<<group_id<<"\t"<<agent_id<<std::endl;
-    test.close();
-}
 void signal_exit_handler(int sig)
 {
     ns3::g_running=false;
 }
+const char *ns3_server_ip="127.0.0.1";
+uint16_t ns3_server_port=3345;
 int main(int argc, char *argv[]){
     signal(SIGTERM, signal_exit_handler);
     signal(SIGINT, signal_exit_handler);
     signal(SIGHUP, signal_exit_handler);//ctrl+c
     signal(SIGTSTP, signal_exit_handler);//ctrl+z       
     //LogComponentEnable("piero",LOG_LEVEL_INFO);
-    //LogComponentEnable("piero_rl",LOG_LEVEL_INFO);
+    LogComponentEnable("piero_rl",LOG_LEVEL_ERROR);
     LogComponentEnable("piero-test",LOG_LEVEL_INFO);
     CommandLine cmd;
     std::string reinforce("false");
@@ -203,7 +194,6 @@ int main(int argc, char *argv[]){
         std::string name=video_path+video_name+std::to_string(i);
         video_log.push_back(name);
     }
-    NS_LOG_INFO("start "<<group_id<<" "<<agent_id);
     int bandwidth_index=std::stoi(bandwith_id);
     DatasetDescriptation dataset[]{
         {std::string("/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_traces/"),
@@ -230,7 +220,17 @@ int main(int argc, char *argv[]){
         if(train.compare("true")==0){
             is_train=true;
         }
-        test_rl_algorithm(video_log,group_id,agent_id,another_sample,is_train);
+        PieroUdpClient client(group_id,agent_id);
+        if(client.Init(ns3_server_ip,ns3_server_port)){
+            bool has_reply=client.HasReply();
+            if(has_reply){
+                test_rl_algorithm(video_log,group_id,agent_id,another_sample,is_train);
+            }else{
+                return 0;
+            }
+        }else{
+            return 0;
+        }
     }else{
         const char *algo[]={"festive","panda","tobasco","osmp","raahs","fdash","sftm","svaa"};
         int n=sizeof(algo)/sizeof(algo[0]);
@@ -242,7 +242,5 @@ int main(int argc, char *argv[]){
             std::cout<<i<<std::endl;
         }
     }
-    //test_signal(group_id,agent_id);
-    NS_LOG_INFO("stop "<<group_id<<" "<<agent_id);
     return 0;
 }

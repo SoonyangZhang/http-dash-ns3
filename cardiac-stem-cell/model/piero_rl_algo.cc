@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <errno.h>   // for errno and strerror_r
 #include <unistd.h>
+#include <netdb.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+#include <netinet/in.h> //for sockaddr_in
+#include <arpa/inet.h>  //inet_addr  
+#include <fcntl.h>
 #include "piero_rl_algo.h"
 #include "piero_dash_client.h"
 #include "piero_byte_codec.h"
@@ -20,6 +21,25 @@ enum MessageType{
     RL_REQUEST,
     RL_RESPONSE,
 };
+void set_nonblocking(int fd){
+  int flags = fcntl(fd, F_GETFL, 0);
+  char buf[128];
+  if (flags == -1) {
+    int saved_errno = errno;
+    strerror_r(saved_errno, buf, sizeof(buf));
+    printf("%s,%s\n",__FUNCTION__,buf);
+  }
+  if (!(flags & O_NONBLOCK)) {
+    //int saved_flags = flags;
+    flags = fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    if (flags == -1) {
+      // bad.
+        int saved_errno = errno;
+        strerror_r(saved_errno, buf, sizeof(buf));
+        printf("%s,%s\n",__FUNCTION__,buf);
+    }
+  }
+}
 ReinforceAlgorithm::ReinforceAlgorithm(int group_id,int agent_id):
 group_id_(group_id),
 agent_id_(agent_id){
@@ -38,9 +58,6 @@ agent_id_(agent_id){
         CloseFd();
         return ; 
     }
-    /*if(sockfd_>0){
-        set_nonblocking(sockfd_);
-    }*/
 }
 ReinforceAlgorithm::~ReinforceAlgorithm(){
     CloseFd();
@@ -178,5 +195,59 @@ void ReinforceAlgorithm::CloseFd(){
         close(sockfd_);
         sockfd_=-1;
     }
+}
+const uint8_t NS_MESSAGE_LABEL=0x01;
+PieroUdpClient::PieroUdpClient(std::string& group_id_str,std::string& agent_id_str){
+    group_id_=std::stoi(group_id_str);
+    agent_id_=std::stoi(agent_id_str);
+}
+PieroUdpClient::~PieroUdpClient(){
+    CloseFd();
+}
+bool PieroUdpClient::Init(const char *ip,uint16_t port){
+    bool success=true;
+    struct sockaddr_in servaddr;
+    servaddr.sin_family = AF_INET; 
+    servaddr.sin_addr.s_addr = inet_addr(ip);
+    servaddr.sin_port = htons(port);
+    if ((sockfd_= socket(AF_INET, SOCK_STREAM, 0)) < 0){
+        NS_LOG_ERROR("Error : Could not create socket");
+        success=false;
+        return success;
+    }
+    if (connect(sockfd_,(struct sockaddr *)&servaddr,sizeof(servaddr)) != 0) { 
+        NS_LOG_ERROR("connection with the server failed"); 
+        CloseFd();
+        success=false;
+        return success;
+    }
+    return success;
+}
+bool PieroUdpClient::HasReply(){
+    int n=0;
+    char buffer[1500];
+    bool has_reply=false;
+    Report();
+    n =read(sockfd_, buffer,1500);
+    if(n>0){
+        has_reply=true;
+    }
+    CloseFd();
+    return has_reply;
+}
+void PieroUdpClient::CloseFd(){
+    if(sockfd_>0){
+        close(sockfd_);
+        sockfd_=-1;
+    }
+}
+void PieroUdpClient::Report(){
+    char buffer[64];
+    int n=0;
+    DataWriter writer(buffer,64);
+    bool success=writer.WriteUInt8(NS_MESSAGE_LABEL)&&
+                writer.WriteUInt32(group_id_)&&
+                writer.WriteUInt32(agent_id_);
+    n=write(sockfd_,buffer,writer.length());
 }
 }

@@ -6,8 +6,22 @@ import select
 import errno
 import subprocess
 import time
-SERVER_ERR_INVAL=-1
-class TcpServer:
+RL_MESSAGE_LABEL=0x00
+NS_MESSAGE_LABEL=0x01
+TIMEOUT_ADD=1000 #milli seconds
+class RequestClientMessage():
+    def __init__(self,tr,gid,aid,bid):
+        self.tr=tr
+        self.gid=gid
+        self.aid=aid
+        self.bid=bid
+        self.timeout=0
+        self.p=None
+        self.timeout_add(TIMEOUT_ADD)
+    def timeout_add(self,add):
+        t=time.time()
+        self.timeout=int(round(t * 1000))+add
+class SocketServer(object):
     def __init__(self, mode, port):
         self._thread = None
         self._thread_terminate = False
@@ -27,9 +41,13 @@ class TcpServer:
         self._socket.bind((self.ip, self.port))
         self.connections={}
         self.ns3_process={}
+        self.metas={}
         self._socket.listen(128)
         self._epl= select.epoll()
         self._epl.register(self._socket.fileno(),select.EPOLLIN)
+        self.log=open("ns3_server.log",'w')
+    def __del__(self):
+        self.log.close()
     def loop_start(self):
         if self._thread is not None:
             return 
@@ -39,7 +57,7 @@ class TcpServer:
         self._thread.start()
     def loop_stop(self, force=False):
         if self._thread is None:
-            return SERVER_ERR_INVAL
+            return 
         self._thread_terminate = True
         if threading.current_thread() != self._thread:
             self._thread.join()
@@ -74,6 +92,7 @@ class TcpServer:
                         pass
                     else:
                         self._close(fd)
+        self.check_recreate_process()
         for key in list(self.ns3_process.keys()):
             ret=subprocess.Popen.poll(self.ns3_process[key])
             if ret is not None:
@@ -84,27 +103,65 @@ class TcpServer:
                 break
             self.loop_once(retry_first_connection=True)
     def _close(self,fd):
-        if fd==self._socket.fileno():
-            self._epl.unregister(fd)
-            self._socket.close()
-        elif fd in self.connections:
+        if fd in self.connections:
             self._epl.unregister(fd)
             self.connections[fd].close()
             self.connections.pop(fd)
+    def _close_server_fd(self):
+        self._epl.unregister(self._socket.fileno())
+        self._socket.close()
     def shutdown(self):
         for fd, conn in self.connections.items():
             self._epl.unregister(fd)
             conn.close()
         self.connections.clear()
-        self._close(self._socket.fileno())
+        self._close_server_fd()
+        self._epl.close()
     def parser_buffer(self,conn,buffer):
-        prefix_cmd="./waf --run 'scratch/piero-test --rl=true --tr=%s --gr=%s --ag=%s --bwid=%s'"
         reader=byte_codec.DataReader()
         reader.append(buffer)
-        tr=reader.read_uint8()
-        group_id,_=reader.read_uint32()
-        agent_id,_=reader.read_uint32()
-        bandwith_id,_=reader.read_uint32()
+        label,_=reader.read_uint8()
+        if label==RL_MESSAGE_LABEL:
+            tr,_=reader.read_uint8()
+            group_id,_=reader.read_uint32()
+            agent_id,_=reader.read_uint32()
+            bandwith_id,_=reader.read_uint32()
+            meta=RequestClientMessage(tr,group_id,agent_id,bandwith_id)
+            self.create_ns3_process(meta,True)
+        elif label==NS_MESSAGE_LABEL:
+            group_id,_=reader.read_uint32()
+            agent_id,_=reader.read_uint32()
+            print("req: ",group_id,agent_id)
+            uuid=group_id*2**32+agent_id
+            self.metas.pop(uuid,None)
+            writer=byte_codec.DataWriter()
+            writer.write_uint32(group_id)
+            writer.write_uint32(agent_id)
+            conn.sendall(writer.content())
+    def check_recreate_process(self):
+        t=time.time()
+        now=int(round(t * 1000))
+        for key in list(self.metas.keys()):
+            meta=self.metas[key]
+            if now>meta.timeout:
+                alive=self.check_process_alive(meta.p)
+                if alive:
+                    meta.timeout_add(TIMEOUT_ADD)
+                else:
+                    self.create_ns3_process(meta,False)
+    def check_process_alive(self,p):
+        alive=False
+        if p:
+            ret=subprocess.Popen.poll(p)
+            if ret is None:
+                alive=True
+        return alive
+    def create_ns3_process(self,meta,first):
+        prefix_cmd="./waf --run 'scratch/piero-test --rl=true --tr=%s --gr=%s --ag=%s --bwid=%s'"
+        tr=meta.tr
+        group_id=meta.gid
+        agent_id=meta.aid
+        bandwith_id=meta.bid
         print(group_id,agent_id)
         reinforce="true"
         train=""
@@ -112,9 +169,21 @@ class TcpServer:
             train="true"
         else:
             train="false"
-        cmd=prefix_cmd%(train,str(group_id),str(agent_id),str(bandwith_id))
-        p= subprocess.Popen(cmd,shell = True)#,stdout=subprocess.PIPE
-        self.ns3_process.update({id(p):p})
+        uuid=group_id*2**32+agent_id
+        alive=self.check_process_alive(meta.p)
+        if not alive:
+            cmd=prefix_cmd%(train,str(group_id),str(agent_id),str(bandwith_id))
+            p=subprocess.Popen(cmd,shell = True)#,stdout=subprocess.PIPE
+            self.ns3_process.update({id(p):p})
+            self.metas.pop(uuid,None)
+            meta.timeout_add(TIMEOUT_ADD)
+            meta.p=p
+            self.metas.update({uuid:meta})
+        else:
+            meta.timeout_add(TIMEOUT_ADD)
+        if not first:
+            self.log.write(str(group_id)+"\t"+str(agent_id)+"\n")
+            self.log.flush()
         time.sleep(0.5)
 Terminate=False
 def signal_handler(signum, frame):
@@ -122,11 +191,11 @@ def signal_handler(signum, frame):
     Terminate =True
 #netstat -tunlp | grep port
 def single_thread():
-    tcp_server=TcpServer("localhost",3345)
+    server=SocketServer("localhost",3345)
     while True:
-        tcp_server.loop_once()
+        server.loop_once()
         if Terminate:
-            tcp_server.shutdown()
+            server.shutdown()
             break
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)

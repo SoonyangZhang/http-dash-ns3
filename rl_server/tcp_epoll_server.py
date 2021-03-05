@@ -117,9 +117,9 @@ class TcpServer():
             self.ip ="127.0.0.1"
         self.port = port
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._socket.setblocking(False)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._socket.bind((self.ip, self.port))
+        self._socket.setblocking(False)
         self._abrs_lock = threading.Lock()
         self.abrs={}
         self.peers={}
@@ -177,6 +177,7 @@ class TcpServer():
             peer.close_fd()
         self.peers.clear()
         self._close(self._socket.fileno())
+        self._epl.close()
     def get_abr(self,gid,aid):
         id=gid*2**32+aid
         env=None
@@ -228,7 +229,7 @@ def multi_thread(num_agents,start,stop,files):
             break
 def start_train():
     NUM_AGENTS=8
-    TRAIN_EPOCH =1000
+    TRAIN_EPOCH =10000
     train_record_dir="train_record/"
     model_dir="model_data/"
     fp.remove_dir(model_dir)
