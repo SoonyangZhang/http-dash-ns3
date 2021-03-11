@@ -45,9 +45,6 @@ class SocketServer(object):
         self._socket.listen(128)
         self._epl= select.epoll()
         self._epl.register(self._socket.fileno(),select.EPOLLIN)
-        self.log=open("ns3_server.log",'w')
-    def __del__(self):
-        self.log.close()
     def loop_start(self):
         if self._thread is not None:
             return 
@@ -181,9 +178,6 @@ class SocketServer(object):
             self.metas.update({uuid:meta})
         else:
             meta.timeout_add(TIMEOUT_ADD)
-        if not first:
-            self.log.write(str(group_id)+"\t"+str(agent_id)+"\n")
-            self.log.flush()
         time.sleep(0.5)
 Terminate=False
 def signal_handler(signum, frame):

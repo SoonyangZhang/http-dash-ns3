@@ -202,6 +202,7 @@ void PieroTraceChannel::ReadPacketFromSocket(PieroSocket *socket,PieroPacket *pa
 }
 void PieroTraceChannel::SetBandwidthTrace(DatasetDescriptation &des,Time interval){
     if(bw_trace_.is_open()) {return ;}
+    des_=des;
     lines_=CountLines(des.name);
     trace_time_[0]=Time(0);
     trace_time_[1]=interval;
@@ -251,12 +252,15 @@ void PieroTraceChannel::OnBandwidthTimerEvent(){
         //read eof clear first;
         bw_trace_.clear();
         bw_trace_.seekg(0, std::ios::beg);
-        int offset=offset_generator_->GetInteger(0,lines_-1);
+        int offset=offset_generator_->GetInteger(0,lines_-2);
         for(int i=0;i<offset;i++){
             std::string buffer;
             getline(bw_trace_,buffer);
         }
         bool success=UpdateBandwidth(0)&&UpdateBandwidth(1);
+        if(!success&&des_.name.size()>0){
+            NS_LOG_ERROR(des_.name<<" "<<offset);
+        }
         NS_ASSERT(success);
         Time next=trace_time_[1]-trace_time_[0];
         bandwidth_timer_=Simulator::Schedule(next,&PieroTraceChannel::OnBandwidthTimerEvent,this);

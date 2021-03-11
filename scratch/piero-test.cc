@@ -109,7 +109,8 @@ void getFiles(std::string &cate_dir,std::vector<std::string> &files)
     closedir(dir);
 }
 //https://github.com/USC-NSL/Oboe/blob/master/traces/trace_0.txt
-void test_algorithm(std::vector<std::string> &video_log,std::string &group_id,std::string &agent_id,
+void test_algorithm(std::vector<std::string> &video_log,std::vector<double> &average_rate,
+                    std::string &group_id,std::string &agent_id,std::string &bid,
                     DatasetDescriptation &des,std::string &algo,std::string &result_folder){
     std::string trace;
     std::string delimit("_");
@@ -118,10 +119,10 @@ void test_algorithm(std::vector<std::string> &video_log,std::string &group_id,st
     std::string parent=std::string (getcwd(buf, FILENAME_MAX));
     std::string folder=parent+ "/traces/"+result_folder;
     makePath(folder);
-    trace=folder+"/"+group_id+delimit+agent_id+delimit+algo;
+    trace=folder+"/"+group_id+delimit+agent_id+delimit+bid+delimit+algo;
     Ptr<PieroBiChannel> channel=CreateObject<PieroBiChannel>();
     Time start=MicroSeconds(10);
-    Ptr<PieroDashClient> client=CreateObject<PieroDashClient>(video_log,trace,4000,3,channel->GetSocketA(),start);
+    Ptr<PieroDashClient> client=CreateObject<PieroDashClient>(video_log,average_rate,trace,4000,3,channel->GetSocketA(),start);
     client->SetAdaptationAlgorithm(algo,group_id,agent_id);
     StopBroadcast *broadcast=client->GetBroadcast();
     Ptr<PieroDashServer> server=CreateObject<PieroDashServer>(channel->GetSocketB(),broadcast);
@@ -129,7 +130,8 @@ void test_algorithm(std::vector<std::string> &video_log,std::string &group_id,st
     Simulator::Run ();
     Simulator::Destroy();
 }
-void test_rl_algorithm(std::vector<std::string> &video_log,std::string &group_id,std::string &agent_id,
+void test_rl_algorithm(std::vector<std::string> &video_log,std::vector<double> &average_rate,
+                    std::string &group_id,std::string &agent_id,std::string &bid,
                       DatasetDescriptation &des,bool train=false){
     std::string result_folder("test");
     std::string algo("reinforce");
@@ -146,11 +148,11 @@ void test_rl_algorithm(std::vector<std::string> &video_log,std::string &group_id
         std::string parent=std::string (getcwd(buf, FILENAME_MAX));
         std::string folder=parent+ "/traces/"+result_folder;
         makePath(folder);
-        trace=folder+"/"+group_id+delimit+agent_id+delimit+algo;
+        trace=folder+"/"+group_id+delimit+agent_id+delimit+bid+delimit+algo;
     }
     Ptr<PieroBiChannel> channel=CreateObject<PieroBiChannel>();
     Time start=MicroSeconds(10);
-    Ptr<PieroDashClient> client=CreateObject<PieroDashClient>(video_log,trace,4000,3,channel->GetSocketA(),start);
+    Ptr<PieroDashClient> client=CreateObject<PieroDashClient>(video_log,average_rate,trace,4000,3,channel->GetSocketA(),start);
     g_rl_server_ip="127.0.0.1";
     g_rl_server_port=1234;
     client->SetAdaptationAlgorithm(algo,group_id,agent_id);
@@ -171,7 +173,7 @@ int main(int argc, char *argv[]){
     signal(SIGINT, signal_exit_handler);
     signal(SIGHUP, signal_exit_handler);//ctrl+c
     signal(SIGTSTP, signal_exit_handler);//ctrl+z       
-    //LogComponentEnable("piero",LOG_LEVEL_INFO);
+    LogComponentEnable("piero",LOG_LEVEL_ERROR);
     LogComponentEnable("piero_rl",LOG_LEVEL_ERROR);
     LogComponentEnable("piero-test",LOG_LEVEL_INFO);
     CommandLine cmd;
@@ -194,28 +196,50 @@ int main(int argc, char *argv[]){
         std::string name=video_path+video_name+std::to_string(i);
         video_log.push_back(name);
     }
-    int bandwidth_index=std::stoi(bandwith_id);
-    DatasetDescriptation dataset[]{
+    float VIDEO_BIT_RATE[]={300,750,1200,1850,2850,4300}; //kbps
+    std::vector<double> average_rate;
+    for (int i=0;i<n;i++){
+        double bps=VIDEO_BIT_RATE[i]*1000;
+        average_rate.push_back(bps);
+    }
+    std::vector<DatasetDescriptation> bw_traces;
+    DatasetDescriptation *dataset_ptr=nullptr;
+    size_t dataset_n=0;
+    DatasetDescriptation train_dataset[]={
         {std::string("/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_traces/"),
         RateTraceType::TIME_BW,TimeUnit::TIME_S,RateUnit::BW_Mbps},
     };
-    std::vector<DatasetDescriptation> bw_traces;
-    for(size_t i=0;i<sizeof(dataset)/sizeof(dataset[0]);i++){
+    DatasetDescriptation test_dataset[]={
+        {std::string("/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_test_traces/"),
+        RateTraceType::TIME_BW,TimeUnit::TIME_S,RateUnit::BW_Mbps},
+    };
+    if(reinforce.compare("true")==0&&(!(train.compare("true")==0))){
+        dataset_ptr=train_dataset;
+        dataset_n=sizeof(train_dataset)/sizeof(train_dataset[0]);
+    }else{
+        dataset_ptr=test_dataset;
+        dataset_n=sizeof(test_dataset)/sizeof(test_dataset[0]);
+    }
+    for(size_t i=0;i<dataset_n;i++){
         std::vector<std::string> files;
-        std::string folder=dataset[i].name;
+        std::string folder=dataset_ptr[i].name;
         getFiles(folder,files);
         for (size_t j=0;j<files.size();j++){
             std::string path_name=folder+files[j];
-            DatasetDescriptation des(path_name,dataset[i].type,
-            dataset[i].time_unit,dataset[i].rate_unit);
+            DatasetDescriptation des(path_name,dataset_ptr[i].type,
+            dataset_ptr[i].time_unit,dataset_ptr[i].rate_unit);
             bw_traces.push_back(des);
         }
     }
-    std::sort(bw_traces.begin(), bw_traces.end(),compare); 
-    //std::cout<<"dataset: "<<bw_traces.size()<<std::endl;
-    std::string name="/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/trace_0.txt";
+    std::sort(bw_traces.begin(), bw_traces.end(),compare);
+    for(int i=0;i<20;i++){
+        std::cout<<bw_traces[i].name<<std::endl;
+    }
+    /*std::string name="/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/trace_0.txt";
     DatasetDescriptation another_sample(name,RateTraceType::TIME_BW,TimeUnit::TIME_MS,RateUnit::BW_Kbps);
     if(reinforce.compare("true")==0){
+        int bid=std::stoi(bandwith_id);
+        DatasetDescriptation bandwidth_sample=bw_traces.at(bid%bw_traces.size());
         bool is_train=false;
         if(train.compare("true")==0){
             is_train=true;
@@ -224,7 +248,7 @@ int main(int argc, char *argv[]){
         if(client.Init(ns3_server_ip,ns3_server_port)){
             bool has_reply=client.HasReply();
             if(has_reply){
-                test_rl_algorithm(video_log,group_id,agent_id,another_sample,is_train);
+                test_rl_algorithm(video_log,average_rate,group_id,agent_id,bandwith_id,another_sample,is_train);
             }else{
                 return 0;
             }
@@ -235,12 +259,15 @@ int main(int argc, char *argv[]){
         const char *algo[]={"festive","panda","tobasco","osmp","raahs","fdash","sftm","svaa"};
         int n=sizeof(algo)/sizeof(algo[0]);
         std::string result_folder("tradition");
-        for(int i=0;i<n;i++){
-            std::string algorithm(algo[i]);
-            test_algorithm(video_log,group_id,agent_id,another_sample,
-                            algorithm,result_folder);
-            std::cout<<i<<std::endl;
+        for(int i=0;i<bw_traces.size();i++){
+            DatasetDescriptation bandwidth_sample=bw_traces.at(i);
+            auto temp_id=std::to_string(i);
+            for(int j=0;j<n;j++){
+                std::string algorithm(algo[j]);
+                test_algorithm(video_log,average_rate,group_id,agent_id,temp_id,bandwidth_sample,
+                                algorithm,result_folder);
+            }
         }
-    }
+    }*/
     return 0;
 }

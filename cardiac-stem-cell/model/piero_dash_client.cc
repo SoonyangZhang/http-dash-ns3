@@ -51,11 +51,18 @@ void ReadSegmentFromFile(std::vector<std::string>& video_log,struct VideoData &v
         video_data.averageBitrate.push_back(average_bitrate);
     }
 }
-PieroDashClient::PieroDashClient(std::vector<std::string> &video_log,std::string &trace_name,int segment_ms,int init_segments,Ptr<PieroSocket> socket,Time start){
+PieroDashClient::PieroDashClient(std::vector<std::string> &video_log,std::vector<double> &average_rate,std::string &trace_name,int segment_ms,int init_segments,Ptr<PieroSocket> socket,Time start){
     init_segments_=init_segments;
     frames_in_segment_=segment_ms*kFramesPerSecond/1000;
     video_data_.segmentDuration=segment_ms;
     ReadSegmentFromFile(video_log,video_data_);
+    if(average_rate.size()>0){
+       video_data_.averageBitrate.clear(); 
+       for(int i=0;i<average_rate.size();i++){
+           double bps=average_rate.at(i);
+           video_data_.averageBitrate.push_back(bps);
+       }
+    }
     channel_=CreateObject<PieroTraceChannel>(socket,&broadcast_);
     channel_->SetSeed(12321);
     channel_->SetRecvCallback(MakeCallback(&PieroDashClient::RecvPacket,this));

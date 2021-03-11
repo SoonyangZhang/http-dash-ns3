@@ -13,7 +13,7 @@ enum DashPlayerState{
 void ReadSegmentFromFile(std::vector<std::string>& video_log,struct VideoData &video_data);
 class PieroDashClient:public Object{
 public:
-    PieroDashClient(std::vector<std::string> &video_log,std::string &trace_name,int segment_ms,int init_segments,Ptr<PieroSocket> socket,Time start);
+    PieroDashClient(std::vector<std::string> &video_log,std::vector<double> &average_rate,std::string &trace_name,int segment_ms,int init_segments,Ptr<PieroSocket> socket,Time start);
     ~PieroDashClient();
     void RecvPacket(PieroTraceChannel *channel,PieroPacket *packet);
     void SetAdaptationAlgorithm(std::string &algo,std::string & group_id,std::string &agent_id);

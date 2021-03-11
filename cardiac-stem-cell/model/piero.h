@@ -115,7 +115,8 @@ enum TimeUnit{
     TIME_S,
 };
 struct DatasetDescriptation{
-    DatasetDescriptation(std::string a1,RateTraceType a2,
+DatasetDescriptation(){}
+DatasetDescriptation(std::string a1,RateTraceType a2,
             TimeUnit a3,RateUnit a4)
 :name(a1),
 type(a2),
@@ -181,5 +182,6 @@ private:
     Ptr<UniformRandomVariable> offset_generator_;
     int seq_=0;
     bool running_=true;
+    DatasetDescriptation des_;
 };
 }

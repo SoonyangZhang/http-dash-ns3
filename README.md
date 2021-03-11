@@ -51,7 +51,8 @@ python ns3_server.py
 cd ns3-allinone-3.xx/ns-3.xx/rl_server  
 python tcp_epoll_server  
 ```
-  
+## Results
+![avatar](https://github.com/SoonyangZhang/http-dash-ns3/blob/main/results/reward1-cdf.tiff)  
 
 
 
