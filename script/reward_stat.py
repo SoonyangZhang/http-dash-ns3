@@ -36,39 +36,35 @@ def stat_out(f,epoch,rewards):
         str(rewards_max)+"\n"
     f.write(out)
     f.flush()
-def pro_tradition():
+def pro_tradition(data_folder,result_dir):
     root_path="/home/zsy/ns-allinone-3.31/ns-3.31/traces/"
-    dir="tradition/"
     algos=["festive","panda","tobasco","osmp","raahs","fdash","sftm","svaa"]
-    all_n=142
-    new_dir="process/"
-    mkdir(root_path+new_dir)
+    all_n=int(len(get_files_name(root_path+data_folder))/(2*len(algos)))
+    mkdir(root_path+result_dir)
     group_id=0
     agent_id=0
     bid=0
     for i in range(len(algos)):
-        dst=root_path+new_dir+algos[i]+".txt"
+        dst=root_path+result_dir+algos[i]+".txt"
         f=open(dst,"w")
         for j in range(all_n):
             name="%s_%s_%s_%s_r.txt"%(str(group_id),str(agent_id),str(j),algos[i])
-            origin=root_path+dir+name
+            origin=root_path+data_folder+name
             r=ReadRewardInfo(origin,1)
             r_copy=[]
             for k in range(1,len(r)-1):
                 r_copy.append(r[k])
             stat_out(f,j,r_copy)
         f.close()
-def pro_rl():
+def pro_rl(data_folder,result_dir):
     root_path="/home/zsy/ns-allinone-3.31/ns-3.31/traces/"
-    dir="log_sim_rl/"
-    all_n=142
-    new_dir="process/"
-    mkdir(root_path+new_dir)
-    dst=root_path+new_dir+"ppo"+".txt"
+    all_n=int(len(get_files_name(root_path+data_folder)))
+    mkdir(root_path+result_dir)
+    dst=root_path+result_dir+"ppo"+".txt"
     f=open(dst,"w")
     for j in range(all_n):
         name=str(j)+".txt"
-        origin=root_path+dir+name
+        origin=root_path+data_folder+name
         r=ReadRewardInfo(origin,7)
         r_copy=[]
         for k in range(1,len(r)):
@@ -76,4 +72,9 @@ def pro_rl():
         stat_out(f,j,r_copy)
     f.close()
 if __name__ == '__main__':
-    pro_rl()
+    rl_data_dir="log_sim_rl/"
+    tra_oboe_dir="oboe/"
+    oboe_dst="oboe_pro/"
+    #pro_tradition(tra_oboe_dir,tra_oboe_dst)
+    rl_oboe_dir="oboe_log_sim_rl/"
+    pro_rl(rl_oboe_dir,oboe_dst)

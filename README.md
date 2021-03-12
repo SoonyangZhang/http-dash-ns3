@@ -52,7 +52,11 @@ cd ns3-allinone-3.xx/ns-3.xx/rl_server
 python tcp_epoll_server  
 ```
 ## Results
-![avatar](https://github.com/SoonyangZhang/http-dash-ns3/blob/main/results/reward1-cdf.tiff)  
-
+test on cooked_test_traces:  
+![avatar](https://github.com/SoonyangZhang/http-dash-ns3/blob/main/results/cook-cdf.png)  
+![avatar](https://github.com/SoonyangZhang/http-dash-ns3/blob/main/results/cook2-cdf.png)  
+test on oboe_traces:  
+![avatar](https://github.com/SoonyangZhang/http-dash-ns3/blob/main/results/oboe-cdf.png)  
+![avatar](https://github.com/SoonyangZhang/http-dash-ns3/blob/main/results/oboe2-cdf.png)  
 
 

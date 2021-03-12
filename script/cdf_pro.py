@@ -62,8 +62,8 @@ def ReadRewardInfo(fileName,column):
     return r
 if __name__ == '__main__':
     root_path="/home/zsy/ns-allinone-3.31/ns-3.31/traces/"
-    dir="process/"
-    out_dir="cdf/"
+    dir="oboe_pro/"
+    out_dir="oboe_cdf/"
     mkdir(root_path+out_dir)
     algos=["ppo","festive","panda","tobasco","osmp","raahs","fdash","sftm","svaa"]
     rewards_of_all_algos=[]

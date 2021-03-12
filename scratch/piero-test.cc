@@ -182,11 +182,13 @@ int main(int argc, char *argv[]){
     std::string group_id("0");
     std::string agent_id("0");
     std::string bandwith_id("0");
+    std::string bandwidth_trace("cook");
     cmd.AddValue ("rl", "reinfore",reinforce);
     cmd.AddValue ("tr", "train",train);
     cmd.AddValue ("gr", "groupid",group_id);
     cmd.AddValue ("ag", "agentid",agent_id);
     cmd.AddValue ("bwid", "bandwidthid",bandwith_id);
+    cmd.AddValue ("bt", "bandwidthtrace",bandwidth_trace);
     cmd.Parse (argc, argv);
     std::string video_path("/home/zsy/ns-allinone-3.31/ns-3.31/video_data/");
     std::string video_name("video_size_");
@@ -213,12 +215,20 @@ int main(int argc, char *argv[]){
         {std::string("/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_test_traces/"),
         RateTraceType::TIME_BW,TimeUnit::TIME_S,RateUnit::BW_Mbps},
     };
+    DatasetDescriptation oboe_dataset[]={
+        {std::string("/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/Oboe_traces/"),
+        RateTraceType::TIME_BW,TimeUnit::TIME_S,RateUnit::BW_Mbps},
+    };
     if(reinforce.compare("true")==0&&(!(train.compare("true")==0))){
         dataset_ptr=train_dataset;
         dataset_n=sizeof(train_dataset)/sizeof(train_dataset[0]);
     }else{
         dataset_ptr=test_dataset;
         dataset_n=sizeof(test_dataset)/sizeof(test_dataset[0]);
+        if(bandwidth_trace.compare("oboe")==0){
+            dataset_ptr=oboe_dataset;
+            dataset_n=sizeof(oboe_dataset)/sizeof(oboe_dataset[0]);
+        }
     }
     for(size_t i=0;i<dataset_n;i++){
         std::vector<std::string> files;
@@ -232,10 +242,11 @@ int main(int argc, char *argv[]){
         }
     }
     std::sort(bw_traces.begin(), bw_traces.end(),compare);
+    std::cout<<bw_traces.size()<<std::endl;
     for(int i=0;i<20;i++){
         std::cout<<bw_traces[i].name<<std::endl;
     }
-    /*std::string name="/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/trace_0.txt";
+    std::string name="/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/trace_0.txt";
     DatasetDescriptation another_sample(name,RateTraceType::TIME_BW,TimeUnit::TIME_MS,RateUnit::BW_Kbps);
     if(reinforce.compare("true")==0){
         int bid=std::stoi(bandwith_id);
@@ -259,6 +270,9 @@ int main(int argc, char *argv[]){
         const char *algo[]={"festive","panda","tobasco","osmp","raahs","fdash","sftm","svaa"};
         int n=sizeof(algo)/sizeof(algo[0]);
         std::string result_folder("tradition");
+        if(bandwidth_trace.compare("oboe")==0){
+            result_folder=std::string("oboe");
+        }
         for(int i=0;i<bw_traces.size();i++){
             DatasetDescriptation bandwidth_sample=bw_traces.at(i);
             auto temp_id=std::to_string(i);
@@ -268,6 +282,6 @@ int main(int argc, char *argv[]){
                                 algorithm,result_folder);
             }
         }
-    }*/
+    }
     return 0;
 }

@@ -8,7 +8,7 @@ algo6=raahs
 algo7=fdash
 algo8=sftm
 algo9=svaa
-output=reward1
+output=cook
 format=pdf
 gnuplot<<!
 set grid
@@ -31,7 +31,7 @@ plot "${algo1}.txt" u 2:3 title "${algo1}" with lines lw 2 lc 0,\
 set output
 exit
 !
-output=reward2
+output=cook2
 gnuplot<<!
 set grid
 set key right bottom
