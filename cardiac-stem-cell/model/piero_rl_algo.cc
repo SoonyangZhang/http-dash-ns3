@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h> //for sockaddr_in
 #include <arpa/inet.h>  //inet_addr  
+#include <netinet/tcp.h> //TCP_NODELAY
 #include <fcntl.h>
 #include "piero_rl_algo.h"
 #include "piero_dash_client.h"
@@ -16,7 +17,9 @@ namespace ns3{
 NS_LOG_COMPONENT_DEFINE("piero_rl");
 const char *g_rl_server_ip="127.0.0.1";
 uint16_t g_rl_server_port=1234;
-const int kBufferSize=1500;
+const int kBufferSize=2000;
+const int kMSS=1492;
+const char kPaddingData[1500]={0};
 enum MessageType{
     RL_REQUEST,
     RL_RESPONSE,
@@ -48,11 +51,13 @@ agent_id_(agent_id){
     // assign IP, PORT 
     servaddr.sin_family = AF_INET; 
     servaddr.sin_addr.s_addr = inet_addr(g_rl_server_ip); 
-    servaddr.sin_port = htons(g_rl_server_port);     
+    servaddr.sin_port = htons(g_rl_server_port);
+    int flag = 1;
     if ((sockfd_= socket(AF_INET, SOCK_STREAM, 0)) < 0){
         printf("\n Error : Could not create socket \n");
         return ;
     }
+    setsockopt (sockfd_, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(flag));
     if (connect(sockfd_,(struct sockaddr *)&servaddr,sizeof(servaddr)) != 0) { 
         NS_LOG_ERROR("connection with the server failed"); 
         CloseFd();
@@ -98,9 +103,12 @@ bool ReinforceAlgorithm::SendRequestMessage(PieroDashClient *client,AlgorithmRep
     uint8_t type=RL_REQUEST;
     uint64_t bytes=0;
     uint64_t time_ms=0;
-    uint64_t sum=sizeof(type)+sizeof(last)+sizeof(int)+sizeof(int)+sizeof(int)+sizeof(int)+
+    uint64_t send_time=TimeMillis();
+    int info_size=sizeof(type)+sizeof(last)+sizeof(int)+sizeof(send_time)+
+                 sizeof(int)+sizeof(int)+sizeof(int)+
                  sizeof(bytes)+sizeof(time_ms)+sizeof(buffer_ms)+
                  sizeof(uint64_t);
+    uint64_t sum=info_size;
     {
         size_t n=throughput.bytesReceived.size();
         if(n>0){
@@ -114,6 +122,7 @@ bool ReinforceAlgorithm::SendRequestMessage(PieroDashClient *client,AlgorithmRep
                  writer.WriteUInt8(type)&&
                  writer.WriteUInt8(last)&&
                  writer.WriteUInt32(request_id_)&&
+                 writer.WriteUInt64(send_time)&&
                  writer.WriteUInt32(group_id_)&&
                  writer.WriteUInt32(agent_id_)&&
                  writer.WriteUInt32(actions)&&
@@ -210,11 +219,13 @@ bool PieroUdpClient::Init(const char *ip,uint16_t port){
     servaddr.sin_family = AF_INET; 
     servaddr.sin_addr.s_addr = inet_addr(ip);
     servaddr.sin_port = htons(port);
+    int flag = 1; 
     if ((sockfd_= socket(AF_INET, SOCK_STREAM, 0)) < 0){
         NS_LOG_ERROR("Error : Could not create socket");
         success=false;
         return success;
     }
+    setsockopt (sockfd_, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(flag));
     if (connect(sockfd_,(struct sockaddr *)&servaddr,sizeof(servaddr)) != 0) { 
         NS_LOG_ERROR("connection with the server failed"); 
         CloseFd();

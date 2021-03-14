@@ -20,15 +20,9 @@ Eight algorithms are implemented:
 3 copy the folder rl_server to  ns3-allinone-3.xx/ns-3.xx/  
 4 put ns3_server.py to ns3-allinone-3.xx/ns-3.xx/  
 5 create a new folder named traces under ns3-allinone-3.xx/ns-3.xx/  
-6 change the video log data path and bandwidth piero-test.cc   
+6 change ns3_path to find video_data and bw_data and bandwidth piero-test.cc   
 ```
-DatasetDescriptation dataset[]{  
-    {std::string("/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_traces/"),  
-    RateTraceType::TIME_BW,TimeUnit::TIME_S,RateUnit::BW_Mbps},  
-};  
-std::string video_path("/home/zsy/ns-allinone-3.31/ns-3.31/video_data/");  
-std::string video_name("video_size_");  
-std::string name="/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/trace_0.txt";  
+std::string ns3_path="/home/zsy/ns-allinone-3.31/ns-3.31/";  
 ```
 7 cooked_traces is downloaded from Pensieve-PPO.  
 8 Rebuid ns3.  

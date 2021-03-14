@@ -190,7 +190,8 @@ int main(int argc, char *argv[]){
     cmd.AddValue ("bwid", "bandwidthid",bandwith_id);
     cmd.AddValue ("bt", "bandwidthtrace",bandwidth_trace);
     cmd.Parse (argc, argv);
-    std::string video_path("/home/zsy/ns-allinone-3.31/ns-3.31/video_data/");
+    std::string ns3_path="/home/zsy/ns-allinone-3.31/ns-3.31/";
+    std::string video_path=ns3_path+std::string("video_data/");
     std::string video_name("video_size_");
     int n=6;
     std::vector<std::string> video_log;
@@ -208,15 +209,15 @@ int main(int argc, char *argv[]){
     DatasetDescriptation *dataset_ptr=nullptr;
     size_t dataset_n=0;
     DatasetDescriptation train_dataset[]={
-        {std::string("/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_traces/"),
+        {ns3_path+std::string("bw_data/cooked_traces/"),
         RateTraceType::TIME_BW,TimeUnit::TIME_S,RateUnit::BW_Mbps},
     };
     DatasetDescriptation test_dataset[]={
-        {std::string("/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_test_traces/"),
+        {ns3_path+std::string("bw_data/cooked_test_traces/"),
         RateTraceType::TIME_BW,TimeUnit::TIME_S,RateUnit::BW_Mbps},
     };
     DatasetDescriptation oboe_dataset[]={
-        {std::string("/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/Oboe_traces/"),
+        {ns3_path+std::string("bw_data/Oboe_traces/"),
         RateTraceType::TIME_BW,TimeUnit::TIME_S,RateUnit::BW_Mbps},
     };
     if(reinforce.compare("true")==0&&(!(train.compare("true")==0))){
@@ -242,12 +243,10 @@ int main(int argc, char *argv[]){
         }
     }
     std::sort(bw_traces.begin(), bw_traces.end(),compare);
-    std::cout<<bw_traces.size()<<std::endl;
-    for(int i=0;i<20;i++){
-        std::cout<<bw_traces[i].name<<std::endl;
-    }
-    std::string name="/home/zsy/ns-allinone-3.31/ns-3.31/bw_data/trace_0.txt";
+    //std::cout<<bw_traces.size()<<std::endl;
+    std::string name=ns3_path+std::string("bw_data/Oboe-master/traces/trace_0.txt");
     DatasetDescriptation another_sample(name,RateTraceType::TIME_BW,TimeUnit::TIME_MS,RateUnit::BW_Kbps);
+    uint64_t last_time=TimeMillis();
     if(reinforce.compare("true")==0){
         int bid=std::stoi(bandwith_id);
         DatasetDescriptation bandwidth_sample=bw_traces.at(bid%bw_traces.size());
@@ -261,9 +260,11 @@ int main(int argc, char *argv[]){
             if(has_reply){
                 test_rl_algorithm(video_log,average_rate,group_id,agent_id,bandwith_id,another_sample,is_train);
             }else{
+                NS_LOG_ERROR(agent_id<<" no reply");
                 return 0;
             }
         }else{
+            NS_LOG_ERROR(agent_id<<" client fail");
             return 0;
         }
     }else{
@@ -273,15 +274,18 @@ int main(int argc, char *argv[]){
         if(bandwidth_trace.compare("oboe")==0){
             result_folder=std::string("oboe");
         }
-        for(int i=0;i<bw_traces.size();i++){
+        for(int i=0;i<1/*bw_traces.size()*/;i++){
             DatasetDescriptation bandwidth_sample=bw_traces.at(i);
             auto temp_id=std::to_string(i);
             for(int j=0;j<n;j++){
                 std::string algorithm(algo[j]);
-                test_algorithm(video_log,average_rate,group_id,agent_id,temp_id,bandwidth_sample,
+                test_algorithm(video_log,average_rate,group_id,agent_id,temp_id,another_sample/*bandwidth_sample*/,
                                 algorithm,result_folder);
             }
         }
     }
+    uint64_t delta=TimeMillis()-last_time;
+    double seconds=1.0*delta/1000;
+    NS_LOG_INFO(group_id<<" "<<agent_id<<" rt: "<<seconds);
     return 0;
 }

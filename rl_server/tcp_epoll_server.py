@@ -9,6 +9,7 @@ import byte_codec as bc
 import rl_agent as ra
 import piero_message as pmsg
 import file_op as fp
+import time
 class TcpPeer(object):
     def __init__(self,server,conn):
         self.server=server
@@ -24,31 +25,35 @@ class TcpPeer(object):
         reader.append(self.buffer)
         all=len(self.buffer)
         sum,success=reader.read_varint()
+        sum_bytes=bc.varient_length(sum)
         remain=b''
         close=False
-        if success:
+        if success and sum>0:
             if sum<=reader.byte_remain():
                 type,_=reader.read_uint8()
                 last,_=reader.read_uint8()
                 request_id,_=reader.read_uint32()
+                send_time,_=reader.read_uint64()
                 group_id,_=reader.read_uint32()
                 agent_id,_=reader.read_uint32()
                 actions,_=reader.read_uint32()
                 last_bytes,_=reader.read_uint64()
-                time,_=reader.read_uint64()
+                delay,_=reader.read_uint64()
                 buffer,_=reader.read_uint64()
                 reward,_=reader.read_double()
-                info=pmsg.RequestInfo(last,request_id,group_id,agent_id,actions,last_bytes,time,buffer,reward)
+                t=time.time()
+                receipt_time=int(round(t * 1000))
+                info=pmsg.RequestInfo(last,request_id,send_time,group_id,agent_id,actions,last_bytes,delay,buffer,reward)
                 pos=reader.cursor()
-                if pos<all:
-                    remain=self.buffer[pos:all]
+                if sum+sum_bytes<all:
+                    remain=self.buffer[sum+sum_bytes:all]
                 if self.abr is None:
                     self.abr=self.server.get_abr(group_id,agent_id)
                 if self.abr:
                     self.abr.handle_request(self,info)
                 else:
                     self.handle_request(info)
-            self.buffer=remain
+                self.buffer=remain
             return close
     def handle_request(self,info):
         print (info.group_id,info.agent_id,info.last,info.r)
@@ -118,6 +123,7 @@ class TcpServer():
         self.port = port
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self._socket.bind((self.ip, self.port))
         self._socket.setblocking(False)
         self._abrs_lock = threading.Lock()
@@ -146,6 +152,7 @@ class TcpServer():
             if fd == self._socket.fileno():
                 conn,addr =self._socket.accept()
                 conn.setblocking(False)
+                conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
                 peer=TcpPeer(self,conn)
                 self.peers.update({conn.fileno():peer})
                 self._epl.register(conn.fileno(), select.EPOLLIN)
@@ -229,14 +236,14 @@ def multi_thread(num_agents,start,stop,files):
             break
 def start_train():
     NUM_AGENTS=8
-    TRAIN_EPOCH =10000
+    TRAIN_EPOCH =10
     train_record_dir="train_record/"
     model_dir="model_data/"
     fp.remove_dir(model_dir)
     fp.mkdir(train_record_dir)
     files=[]
     delimiter="_"
-    span=100
+    span=10
     round=int(TRAIN_EPOCH/span)
     for i in range(NUM_AGENTS):
         name=train_record_dir+"train"+delimiter+str(i+1)+".txt"
@@ -253,5 +260,7 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGHUP, signal_handler) # ctrl+c
     signal.signal(signal.SIGTSTP, signal_handler) #ctrl+z
+    last= time.time()
     start_train()
-    print("stop")
+    delta=time.time()-last
+    print("stop: "+str(int(round(delta* 1000))))

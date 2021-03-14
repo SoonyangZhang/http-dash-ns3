@@ -1,4 +1,5 @@
 import tensorflow.compat.v1 as tf
+#from tensorflow.compat.v1 import ConfigProto
 import threading
 import numpy as np
 import piero_abrenv as pabr
@@ -39,6 +40,9 @@ class CentralAgent(object):
         fp.mkdir(model_dir)
         os.environ["CUDA_VISIBLE_DEVICES"]="0"
         tf.disable_v2_behavior()
+        #config = ConfigProto()
+        #config.gpu_options.allow_growth = True
+        #sess=tf.Session(config=config)
         sess=tf.Session()
         actor=network.Network(sess,self.s_dim,self.a_dim,self.lr_rate)
         init = tf.global_variables_initializer() 
@@ -106,6 +110,9 @@ class Agent(object):
         os.environ["CUDA_VISIBLE_DEVICES"]="0"
         tf.disable_v2_behavior()
         self.env=pabr.AbrEnv(self.tcp_server,self.s_dim)
+        #config = ConfigProto()
+        #config.gpu_options.allow_growth = True
+        #sess=tf.Session(config=config)
         sess=tf.Session()
         actor=network.Network(sess,self.s_dim,self.a_dim,self.lr_rate)
         init = tf.global_variables_initializer() 
@@ -121,7 +128,7 @@ class Agent(object):
             s_batch, a_batch, p_batch, r_batch = [], [], [], []
             first_sample=True
             while True:
-                update,last=self.env.process_event()
+                peer,update,last=self.env.process_event()
                 if update:
                     obs,r=self.env.get_state_reward()
                     if not last:
@@ -139,7 +146,7 @@ class Agent(object):
                     action_cumsum = np.cumsum(action_prob)
                     choice = (action_cumsum > np.random.randint(
                         1, RAND_RANGE) / float(RAND_RANGE)).argmax()
-                    self.env.step(choice,0)
+                    self.env.step(peer,choice,0)
                     last_action=choice
                     last_prob=action_prob
                 if last:
@@ -155,6 +162,7 @@ class Agent(object):
                     break
                 if self._thread_terminate:
                     break
+            self.print_stat_info(group_id)
             if self._thread_terminate:
                 break
         sess.close()
@@ -174,5 +182,14 @@ class Agent(object):
             str(rewards_median)+d+str(rewards_95per)+d+\
             str(rewards_max)+"\n"
         self.f.write(out)
-        self.f.flush()
-    
+    def print_stat_info(self,group_id):
+        count=self.env.msg_count
+        intra_delay_average=0
+        trans_delay_average=0
+        if count>1:
+            temp=1.0*self.env.intra_delay/(count-1)
+            intra_delay_average=int(temp)
+        if count>0:
+            temp=1.0*self.env.trans_delay/count
+            trans_delay_average=int(temp)
+        print(self.agent_id,group_id,count,intra_delay_average,trans_delay_average)

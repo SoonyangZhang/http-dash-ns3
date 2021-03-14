@@ -128,7 +128,7 @@ class SocketServer(object):
         elif label==NS_MESSAGE_LABEL:
             group_id,_=reader.read_uint32()
             agent_id,_=reader.read_uint32()
-            print("req: ",group_id,agent_id)
+            #print("req: ",group_id,agent_id)
             uuid=group_id*2**32+agent_id
             self.metas.pop(uuid,None)
             writer=byte_codec.DataWriter()
@@ -159,7 +159,7 @@ class SocketServer(object):
         group_id=meta.gid
         agent_id=meta.aid
         bandwith_id=meta.bid
-        print(group_id,agent_id)
+        #print(group_id,agent_id)
         reinforce="true"
         train=""
         if tr:
@@ -178,7 +178,7 @@ class SocketServer(object):
             self.metas.update({uuid:meta})
         else:
             meta.timeout_add(TIMEOUT_ADD)
-        time.sleep(0.5)
+        #time.sleep(0.5)
 Terminate=False
 def signal_handler(signum, frame):
     global Terminate
