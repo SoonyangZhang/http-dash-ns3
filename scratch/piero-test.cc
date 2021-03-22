@@ -166,8 +166,6 @@ void signal_exit_handler(int sig)
 {
     ns3::g_running=false;
 }
-const char *ns3_server_ip="127.0.0.1";
-uint16_t ns3_server_port=3345;
 int main(int argc, char *argv[]){
     signal(SIGTERM, signal_exit_handler);
     signal(SIGINT, signal_exit_handler);
@@ -254,19 +252,7 @@ int main(int argc, char *argv[]){
         if(train.compare("true")==0){
             is_train=true;
         }
-        PieroUdpClient client(group_id,agent_id);
-        if(client.Init(ns3_server_ip,ns3_server_port)){
-            bool has_reply=client.HasReply();
-            if(has_reply){
-                test_rl_algorithm(video_log,average_rate,group_id,agent_id,bandwith_id,another_sample,is_train);
-            }else{
-                NS_LOG_ERROR(agent_id<<" no reply");
-                return 0;
-            }
-        }else{
-            NS_LOG_ERROR(agent_id<<" client fail");
-            return 0;
-        }
+        test_rl_algorithm(video_log,average_rate,group_id,agent_id,bandwith_id,another_sample,is_train);
     }else{
         const char *algo[]={"festive","panda","tobasco","osmp","raahs","fdash","sftm","svaa"};
         int n=sizeof(algo)/sizeof(algo[0]);

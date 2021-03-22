@@ -10,11 +10,11 @@ import rl_agent as ra
 import piero_message as pmsg
 import file_op as fp
 import time
+import logging
 class TcpPeer(object):
     def __init__(self,server,conn):
         self.server=server
         self.conn=conn
-        self.abr=None
         self.buffer=b''
         self.dead=False
     def __del__(self):
@@ -43,24 +43,13 @@ class TcpPeer(object):
                 reward,_=reader.read_double()
                 t=time.time()
                 receipt_time=int(round(t * 1000))
-                info=pmsg.RequestInfo(last,request_id,send_time,group_id,agent_id,actions,last_bytes,delay,buffer,reward)
+                info=pmsg.RequestInfo(self.conn.fileno(),last,request_id,send_time,group_id,agent_id,actions,last_bytes,delay,buffer,reward)
                 pos=reader.cursor()
                 if sum+sum_bytes<all:
                     remain=self.buffer[sum+sum_bytes:all]
-                if self.abr is None:
-                    self.abr=self.server.get_abr(group_id,agent_id)
-                if self.abr:
-                    self.abr.handle_request(self,info)
-                else:
-                    self.handle_request(info)
+                self.server.handele_request(info)
                 self.buffer=remain
             return close
-    def handle_request(self,info):
-        print (info.group_id,info.agent_id,info.last,info.r)
-        choice=np.random.randint(0,info.actions)
-        terminate=0
-        res=pmsg.ResponceInfo(choice,terminate)
-        self.send_responce(res)
     def send_responce(self,res):
         if self.dead is False:
             sum=7
@@ -102,18 +91,14 @@ class TcpPeer(object):
                 pass
             else:
                 close=True
-        #print("msglen: "+str(length))
         return close
     def close_fd(self):
         self.dead=True
         self.conn.close()
 class TcpServer():
-    def __init__(self, mode, port):
+    def __init__(self, mode, port,state_pipes):
         self._thread = None
         self._thread_terminate = False
-        # localhost -> (127.0.0.1)
-        # public ->    (0.0.0.0)
-        # otherwise, mode is interpreted as an IP address.
         if mode == "localhost":
             self.ip = mode
         elif mode == "public":
@@ -121,17 +106,35 @@ class TcpServer():
         else:
             self.ip ="127.0.0.1"
         self.port = port
+        self.state_pipes=state_pipes
+        self.logger = logging.getLogger("rl")
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._socket.bind((self.ip, self.port))
         self._socket.setblocking(False)
-        self._abrs_lock = threading.Lock()
-        self.abrs={}
         self.peers={}
         self._socket.listen(128)
         self._epl= select.epoll()
         self._epl.register(self._socket.fileno(),select.EPOLLIN)
+    def handele_request(self,info):
+        aid=info.agent_id
+        #self.logger.debug("info {} {}".format(aid,info.request_id))
+        self.state_pipes[aid][0].send(info)
+    def check_pipe(self):
+        for i in range(len(self.state_pipes)):
+            res=None
+            if self.state_pipes[i][0].poll(0):
+                try:
+                   res=self.state_pipes[i][0].recv()
+                except EOFError:
+                    self.logger.debug("pipe read error {}".format(i))
+            if res:
+                peer=self.peers.get(res.fd)
+                assert peer
+                if peer:
+                    peer.send_responce(res)
     def loop_start(self):
         if self._thread is not None:
             return 
@@ -161,6 +164,7 @@ class TcpServer():
                 if ret:
                     #print("close")
                     self._close(fd)
+        self.check_pipe()
         for fd in list(self.peers.keys()):
             if self.peers[fd].dead:
                 self._close(fd)
@@ -185,55 +189,47 @@ class TcpServer():
         self.peers.clear()
         self._close(self._socket.fileno())
         self._epl.close()
-    def get_abr(self,gid,aid):
-        id=gid*2**32+aid
-        env=None
-        self._abrs_lock.acquire()
-        env=self.abrs.get(id)
-        self._abrs_lock.release()
-        return env
-    def register_abr(self,gid,aid,abr):
-        id=gid*2**32+aid
-        self._abrs_lock.acquire()
-        old=self.abrs.get(id)
-        if old is None:
-            self.abrs.update({id:abr})
-        self._abrs_lock.release()
-    def unregister_abr(self,gid,aid):
-        id=gid*2**32+aid
-        self._abrs_lock.acquire()
-        self.abrs.pop(id,None)
-        self._abrs_lock.release()
 Terminate=False
 def signal_handler(signum, frame):
     global Terminate
     Terminate =True
-def multi_thread(num_agents,start,stop,files):
-    tcp_server=TcpServer("localhost",1234)
-    tcp_server.loop_start()
-    net_params_queues = []
-    exp_queues = []
+def multi_thread(num_agents,start,stop,pathnames):
+    net_params_pipes= []
+    exp_pipes=[]
+    state_pipes=[]
     agents=[]
     for i in range(num_agents):
-        net_params_queues.append(mp.Queue(1))
-        exp_queues.append(mp.Queue(1))
-    coordinator=ra.CentralAgent(num_agents,start,stop,net_params_queues,exp_queues)
-    coordinator.loop_start()
+        conn1,conn2=mp.Pipe()
+        conn3,conn4=mp.Pipe()
+        conn5,conn6=mp.Pipe()
+        net_params_pipes.append((conn1,conn2))
+        exp_pipes.append((conn3,conn4))
+        state_pipes.append((conn5,conn6))
+    tcp_server=TcpServer("localhost",1234,state_pipes)
+    coordinator=ra.CentralAgent(num_agents,start,stop,net_params_pipes,exp_pipes)
+    coordinator.start()
     for i in range(num_agents):
-        agent=ra.Agent(files[i],tcp_server,i+1,start,stop,True,net_params_queues[i],exp_queues[i])
+        agent=ra.Agent(pathnames[i],i,start,stop,state_pipes[i],net_params_pipes[i],exp_pipes[i])
         agents.append(agent)
-        agent.loop_start()
-    while True:
-        if Terminate:
-            tcp_server.loop_stop()
-            for i in range(len(agents)):
-                agents[i].loop_stop()
+        agent.start()
+    for i in range(len(state_pipes)):
+        state_pipes[i][1].close()
+    while not Terminate:
+        tcp_server.loop_once()
+        active=0;
+        for i in range(num_agents):
+            if agents[i].is_alive():
+                active+=1
+        if coordinator.is_alive():
+            active+=1
+        if active==0:
             break
-        if coordinator.peek_done():
-            tcp_server.loop_stop()
-            for i in range(len(agents)):
-                agents[i].loop_stop()
-            break
+    tcp_server.shutdown()
+    coordinator.stop_process()
+    coordinator.join()
+    for i in range(num_agents):
+        agents[i].stop_process()
+        agents[i].join()
 def start_train():
     NUM_AGENTS=8
     TRAIN_EPOCH =10
@@ -241,25 +237,26 @@ def start_train():
     model_dir="model_data/"
     fp.remove_dir(model_dir)
     fp.mkdir(train_record_dir)
-    files=[]
+    pathnames=[]
     delimiter="_"
     span=10
     round=int(TRAIN_EPOCH/span)
     for i in range(NUM_AGENTS):
         name=train_record_dir+"train"+delimiter+str(i+1)+".txt"
-        fout=open(name,'w')
-        files.append(fout)
+        pathnames.append(name)
     for i in range(round):
         start=i*span
         stop=(i+1)*span
-        multi_thread(NUM_AGENTS,start,stop,files)
-    for i in range(len(files)):
-        files[i].close()
+        multi_thread(NUM_AGENTS,start,stop,pathnames)
+        if Terminate:
+            break
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGHUP, signal_handler) # ctrl+c
     signal.signal(signal.SIGTSTP, signal_handler) #ctrl+z
+    logging.basicConfig(format='[%(filename)s:%(lineno)d] %(message)s')
+    logging.getLogger("rl").setLevel(logging.DEBUG)
     last= time.time()
     start_train()
     delta=time.time()-last

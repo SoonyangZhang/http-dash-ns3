@@ -34,16 +34,20 @@ sudo su
 ./waf --run "scratch/piero-test --rl=false"
 ```
 Train a reinforce learning algorithm:  
-1 start ns3_server  
+The binary path in rl_agent.py should be changed:  
 ```
-cd ns3-allinone-3.xx/ns-3.xx  
-sudo su  
-python ns3_server.py  
+NS3_PATH="/home/zsy/ns-allinone-3.31/ns-3.31/build/scratch/"  
 ```
-2 start rl server:  
+Configure environmental variables:  
+```
+gedit /etc/profile  
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/zsy/ns-allinone-3.31/ns-3.31/build/lib/  
+```
+Initial the train process:  
 ```
 cd ns3-allinone-3.xx/ns-3.xx/rl_server  
-python tcp_epoll_server  
+source /etc/profile  
+python ns3-dash-train.py  
 ```
 ## Results
 test on cooked_test_traces:  

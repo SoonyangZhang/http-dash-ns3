@@ -17,17 +17,4 @@ private:
     int sockfd_=-1;
     int request_id_=0;
 };
-class PieroUdpClient{
-public:
-    PieroUdpClient(std::string& group_id_str,std::string& agent_id_str);
-    ~PieroUdpClient();
-    bool Init(const char *ip,uint16_t port);
-    bool HasReply();
-private:
-    void CloseFd();
-    void Report();
-    int group_id_=0;
-    int agent_id_=0;
-    int sockfd_=-1;
-};
 }
