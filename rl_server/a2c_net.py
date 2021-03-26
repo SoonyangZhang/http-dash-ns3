@@ -26,9 +26,8 @@ def print_net_info(sess,trainable_var,log_v=False):
             print(result)
             #print(param.numpy())
 class Network():
-    def __init__(self,sess, state_dim, action_dim, learning_rate):
+    def __init__(self,state_dim, action_dim, learning_rate,scope='actor'):
         self._entropy = 5.
-        self.sess=sess
         self.s_dim=state_dim
         self.a_dim=action_dim
         self.lr_rate = learning_rate
@@ -37,7 +36,7 @@ class Network():
         self.old_pi = tf.placeholder(tf.float32, [None, self.a_dim])
         self.acts = tf.placeholder(tf.float32, [None, self.a_dim])
         self.entropy_weight = tf.placeholder(tf.float32)
-        self.pi, self.val = self.create_network(inputs=self.inputs)
+        self.pi, self.val = self.create_network(inputs=self.inputs,scope=scope)
         self.real_out = tf.clip_by_value(self.pi, ACTION_EPS, 1. - ACTION_EPS)
         self.log_prob = tf.log(tf.reduce_sum(tf.multiply(self.real_out, self.acts), reduction_indices=1, keepdims=True))
         self.entropy = tf.multiply(self.real_out, tf.log(self.real_out))
@@ -45,7 +44,7 @@ class Network():
         self.a2closs = self.log_prob * self.adv
         # Get all network parameters
         self.network_params = \
-            tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope='actor')
+            tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,scope=scope)
 
         # Set all network parameters
         self.input_network_params = []
@@ -63,8 +62,8 @@ class Network():
         self.optimize = tf.train.AdamOptimizer(self.lr_rate).minimize(self.loss)
         self.val_loss = tflearn.mean_square(self.val, self.R)
         self.val_opt = tf.train.AdamOptimizer(self.lr_rate * 10.).minimize(self.val_loss)
-    def create_network(self,inputs):
-        with tf.variable_scope('actor'):
+    def create_network(self,inputs,scope):
+        with tf.variable_scope(scope):
             split_0 = tflearn.conv_1d(
                 inputs[:, 0:1,:], FEATURE_NUM,1, activation='relu')
             split_1 = tflearn.conv_1d(
@@ -79,15 +78,15 @@ class Network():
             pi = tflearn.fully_connected(pi_net, self.a_dim, activation='softmax')
             v=tflearn.fully_connected(v_net, 1, activation='linear')
             return pi,v
-    def predict(self, input):
-        action=self.sess.run(self.pi,feed_dict={self.inputs:input})
+    def predict(self, sess,input):
+        action=sess.run(self.pi,feed_dict={self.inputs:input})
         return action[0]
-    def print_net_info(self):
-        print_net_info(self.sess,self.network_params,True)
-    def get_network_params(self):
-        return self.sess.run(self.network_params)
-    def set_network_params(self, input_network_params):
-        self.sess.run(self.set_network_params_op, feed_dict={
+    def print_net_info(self,sess):
+        print_net_info(sess,self.network_params,True)
+    def get_network_params(self,sess):
+        return sess.run(self.network_params)
+    def set_network_params(self, sess,input_network_params):
+        sess.run(self.set_network_params_op, feed_dict={
             i: d for i, d in zip(self.input_network_params, input_network_params)
         })
     def r(self, pi_new, pi_old, acts):
@@ -97,23 +96,23 @@ class Network():
         self._entropy *= decay
     def get_entropy(self, step):
         return np.clip(self._entropy, 0.01, 5.)
-    def train(self, s_batch, a_batch, p_batch, v_batch, epoch):
+    def train(self,sess,s_batch, a_batch, p_batch, v_batch, epoch):
         s_batch, a_batch, p_batch, v_batch = tflearn.data_utils.shuffle(s_batch, a_batch, p_batch, v_batch)
-        self.sess.run([self.optimize, self.val_opt], feed_dict={
+        sess.run([self.optimize, self.val_opt], feed_dict={
             self.inputs: s_batch,
             self.acts: a_batch,
             self.R: v_batch, 
             self.old_pi: p_batch,
             self.entropy_weight: self.get_entropy(epoch)
         })
-    def compute_v(self, s_batch, a_batch, r_batch, terminal):
+    def compute_v(self, sess,s_batch, a_batch, r_batch, terminal):
         ba_size = len(s_batch)
         R_batch = np.zeros([len(r_batch), 1])
 
         if terminal:
             R_batch[-1, 0] = 0  # terminal state
         else:    
-            v_batch = self.sess.run(self.val, feed_dict={
+            v_batch =sess.run(self.val, feed_dict={
                 self.inputs: s_batch
             })
             R_batch[-1, 0] = v_batch[-1, 0]  # boot strap from last state
@@ -161,13 +160,13 @@ def network_train():
     state=np.reshape(obs,(1,S_DIM[0], S_DIM[1]))
     print (state)
     sess=tf.Session()
-    model=Network(sess,S_DIM,A_DIM,ACTOR_LR_RATE)
+    model=Network(S_DIM,A_DIM,ACTOR_LR_RATE)
     init = tf.global_variables_initializer() 
     sess.run(init)
     saver = tf.train.Saver() 
     model.print_net_info()
     for i in range(20):
-        action_prob=model.predict(state)
+        action_prob=model.predict(sess,state)
         print(action_prob)
         action=np.random.choice(A_DIM,p=action_prob)
         print(action)

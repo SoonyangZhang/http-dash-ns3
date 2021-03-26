@@ -10,6 +10,7 @@ import rl_agent as ra
 import piero_message as pmsg
 import file_op as fp
 import time
+import math
 import logging
 class TcpPeer(object):
     def __init__(self,server,conn):
@@ -96,7 +97,7 @@ class TcpPeer(object):
         self.dead=True
         self.conn.close()
 class TcpServer():
-    def __init__(self, mode, port,state_pipes):
+    def __init__(self, mode, port,state_pipes,id_span):
         self._thread = None
         self._thread_terminate = False
         if mode == "localhost":
@@ -107,6 +108,7 @@ class TcpServer():
             self.ip ="127.0.0.1"
         self.port = port
         self.state_pipes=state_pipes
+        self.id_span=id_span
         self.logger = logging.getLogger("rl")
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -121,7 +123,8 @@ class TcpServer():
     def handele_request(self,info):
         aid=info.agent_id
         #self.logger.debug("info {} {}".format(aid,info.request_id))
-        self.state_pipes[aid][0].send(info)
+        index=int(info.agent_id/self.id_span)
+        self.state_pipes[index][0].send(info)
     def check_pipe(self):
         for i in range(len(self.state_pipes)):
             res=None
@@ -193,32 +196,34 @@ Terminate=False
 def signal_handler(signum, frame):
     global Terminate
     Terminate =True
-def multi_thread(num_agents,start,stop,pathnames):
+def multi_thread(num_agent,id_span,left,right,pathnames):
     net_params_pipes= []
     exp_pipes=[]
     state_pipes=[]
-    agents=[]
-    for i in range(num_agents):
+    managers=[]
+    num_manager=math.ceil(num_agent/id_span)
+    for i in range(num_manager):
+        first_id=i*id_span
+        last_id=min((i+1)*id_span,num_agent)
         conn1,conn2=mp.Pipe()
         conn3,conn4=mp.Pipe()
         conn5,conn6=mp.Pipe()
         net_params_pipes.append((conn1,conn2))
         exp_pipes.append((conn3,conn4))
         state_pipes.append((conn5,conn6))
-    tcp_server=TcpServer("localhost",1234,state_pipes)
-    coordinator=ra.CentralAgent(num_agents,start,stop,net_params_pipes,exp_pipes)
+        manager=ra.AgentManager(first_id,last_id,left,right,state_pipes[i],net_params_pipes[i],exp_pipes[i])
+        managers.append(manager)
+        manager.start()
+    tcp_server=TcpServer("localhost",1234,state_pipes,id_span)
+    coordinator=ra.CentralAgent(num_agent,left,right,net_params_pipes,exp_pipes)
     coordinator.start()
-    for i in range(num_agents):
-        agent=ra.Agent(pathnames[i],i,start,stop,state_pipes[i],net_params_pipes[i],exp_pipes[i])
-        agents.append(agent)
-        agent.start()
     for i in range(len(state_pipes)):
         state_pipes[i][1].close()
     while not Terminate:
         tcp_server.loop_once()
         active=0;
-        for i in range(num_agents):
-            if agents[i].is_alive():
+        for i in range(num_manager):
+            if managers[i].is_alive():
                 active+=1
         if coordinator.is_alive():
             active+=1
@@ -227,11 +232,12 @@ def multi_thread(num_agents,start,stop,pathnames):
     tcp_server.shutdown()
     coordinator.stop_process()
     coordinator.join()
-    for i in range(num_agents):
-        agents[i].stop_process()
-        agents[i].join()
+    for i in range(num_manager):
+        managers[i].stop_process()
+        managers[i].join()
 def start_train():
-    NUM_AGENTS=8
+    NUM_AGENTS=6
+    id_span=4
     TRAIN_EPOCH =10
     train_record_dir="train_record/"
     model_dir="model_data/"
@@ -239,17 +245,10 @@ def start_train():
     fp.mkdir(train_record_dir)
     pathnames=[]
     delimiter="_"
-    span=10
-    round=int(TRAIN_EPOCH/span)
     for i in range(NUM_AGENTS):
         name=train_record_dir+"train"+delimiter+str(i+1)+".txt"
         pathnames.append(name)
-    for i in range(round):
-        start=i*span
-        stop=(i+1)*span
-        multi_thread(NUM_AGENTS,start,stop,pathnames)
-        if Terminate:
-            break
+    multi_thread(NUM_AGENTS,id_span,0,TRAIN_EPOCH,pathnames)
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
