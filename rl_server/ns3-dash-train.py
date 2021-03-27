@@ -197,9 +197,8 @@ def signal_handler(signum, frame):
     global Terminate
     Terminate =True
 def multi_thread(num_agent,id_span,left,right,pathnames):
-    net_params_pipes= []
-    exp_pipes=[]
     state_pipes=[]
+    control_msg_pipes=[]
     managers=[]
     num_manager=math.ceil(num_agent/id_span)
     for i in range(num_manager):
@@ -207,15 +206,13 @@ def multi_thread(num_agent,id_span,left,right,pathnames):
         last_id=min((i+1)*id_span,num_agent)
         conn1,conn2=mp.Pipe()
         conn3,conn4=mp.Pipe()
-        conn5,conn6=mp.Pipe()
-        net_params_pipes.append((conn1,conn2))
-        exp_pipes.append((conn3,conn4))
-        state_pipes.append((conn5,conn6))
-        manager=ra.AgentManager(first_id,last_id,left,right,state_pipes[i],net_params_pipes[i],exp_pipes[i])
+        state_pipes.append((conn1,conn2))
+        control_msg_pipes.append((conn3,conn4))
+        manager=ra.AgentManager(first_id,last_id,state_pipes[i],control_msg_pipes[i])
         managers.append(manager)
         manager.start()
     tcp_server=TcpServer("localhost",1234,state_pipes,id_span)
-    coordinator=ra.CentralAgent(num_agent,left,right,net_params_pipes,exp_pipes)
+    coordinator=ra.CentralAgent(num_agent,id_span,left,right,control_msg_pipes)
     coordinator.start()
     for i in range(len(state_pipes)):
         state_pipes[i][1].close()
@@ -236,7 +233,7 @@ def multi_thread(num_agent,id_span,left,right,pathnames):
         managers[i].stop_process()
         managers[i].join()
 def start_train():
-    NUM_AGENTS=6
+    NUM_AGENTS=8
     id_span=4
     TRAIN_EPOCH =10
     train_record_dir="train_record/"

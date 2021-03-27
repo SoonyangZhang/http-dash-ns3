@@ -16,6 +16,9 @@ def get_files_name(folder):
             for each in files:
                 list.append(each)
     return list
+def count_files(folder):
+    list=get_files_name(folder)
+    return (len(list))
 def check_filename_contain(path,string):
     ret=False
     files=get_files_name(path)

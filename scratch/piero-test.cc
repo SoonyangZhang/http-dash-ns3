@@ -132,17 +132,13 @@ void test_algorithm(std::vector<std::string> &video_log,std::vector<double> &ave
 }
 void test_rl_algorithm(std::vector<std::string> &video_log,std::vector<double> &average_rate,
                     std::string &group_id,std::string &agent_id,std::string &bid,
-                      DatasetDescriptation &des,bool train=false){
+                      DatasetDescriptation &des,bool log=false){
     std::string result_folder("test");
     std::string algo("reinforce");
     std::string trace;
     std::string delimit("_");
-    bool log=true;
-    if(train){
-        result_folder=std::string("train");
-        log=false;
-    }
     if(log){
+        result_folder=std::string("train");
         char buf[FILENAME_MAX];
         memset(buf,0,FILENAME_MAX);        
         std::string parent=std::string (getcwd(buf, FILENAME_MAX));
@@ -166,6 +162,8 @@ void signal_exit_handler(int sig)
 {
     ns3::g_running=false;
 }
+const char *ns3_server_ip="127.0.0.1";
+uint16_t ns3_server_port=3345;
 int main(int argc, char *argv[]){
     signal(SIGTERM, signal_exit_handler);
     signal(SIGINT, signal_exit_handler);
@@ -188,7 +186,7 @@ int main(int argc, char *argv[]){
     cmd.AddValue ("bwid", "bandwidthid",bandwith_id);
     cmd.AddValue ("bt", "bandwidthtrace",bandwidth_trace);
     cmd.Parse (argc, argv);
-    std::string ns3_path="/home/zsy/ns-allinone-3.31/ns-3.31/";
+    std::string ns3_path="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/";
     std::string video_path=ns3_path+std::string("video_data/");
     std::string video_name("video_size_");
     int n=6;
@@ -218,16 +216,19 @@ int main(int argc, char *argv[]){
         {ns3_path+std::string("bw_data/Oboe_traces/"),
         RateTraceType::TIME_BW,TimeUnit::TIME_S,RateUnit::BW_Mbps},
     };
-    if(reinforce.compare("true")==0&&(!(train.compare("true")==0))){
-        dataset_ptr=train_dataset;
-        dataset_n=sizeof(train_dataset)/sizeof(train_dataset[0]);
-    }else{
-        dataset_ptr=test_dataset;
-        dataset_n=sizeof(test_dataset)/sizeof(test_dataset[0]);
-        if(bandwidth_trace.compare("oboe")==0){
-            dataset_ptr=oboe_dataset;
-            dataset_n=sizeof(oboe_dataset)/sizeof(oboe_dataset[0]);
+    if(reinforce.compare("true")==0){
+        if(train.compare("true")==0){
+            dataset_ptr=train_dataset;
+            dataset_n=sizeof(train_dataset)/sizeof(train_dataset[0]);
+        }else{
+            dataset_ptr=test_dataset;
+            dataset_n=sizeof(test_dataset)/sizeof(test_dataset[0]);
+            if (bandwidth_trace.compare("oboe")==0){
+                dataset_ptr=oboe_dataset;
+                dataset_n=sizeof(oboe_dataset)/sizeof(oboe_dataset[0]);                
+            }
         }
+
     }
     for(size_t i=0;i<dataset_n;i++){
         std::vector<std::string> files;
@@ -241,7 +242,6 @@ int main(int argc, char *argv[]){
         }
     }
     std::sort(bw_traces.begin(), bw_traces.end(),compare);
-    //std::cout<<bw_traces.size()<<std::endl;
     std::string name=ns3_path+std::string("bw_data/Oboe-master/traces/trace_0.txt");
     DatasetDescriptation another_sample(name,RateTraceType::TIME_BW,TimeUnit::TIME_MS,RateUnit::BW_Kbps);
     uint64_t last_time=TimeMillis();
@@ -252,7 +252,7 @@ int main(int argc, char *argv[]){
         if(train.compare("true")==0){
             is_train=true;
         }
-        test_rl_algorithm(video_log,average_rate,group_id,agent_id,bandwith_id,another_sample,is_train);
+        test_rl_algorithm(video_log,average_rate,group_id,agent_id,bandwith_id,bandwidth_sample,is_train);
     }else{
         const char *algo[]={"festive","panda","tobasco","osmp","raahs","fdash","sftm","svaa"};
         int n=sizeof(algo)/sizeof(algo[0]);
@@ -272,6 +272,8 @@ int main(int argc, char *argv[]){
     }
     uint64_t delta=TimeMillis()-last_time;
     double seconds=1.0*delta/1000;
-    NS_LOG_INFO(group_id<<" "<<agent_id<<" rt: "<<seconds);
+    if(reinforce.compare("true")==0){
+        NS_LOG_INFO(train<<" "<<group_id<<" "<<agent_id<<" "<<bandwith_id<<" "<<seconds);
+    }
     return 0;
 }
