@@ -64,13 +64,17 @@ class Network():
         self.val_opt = tf.train.AdamOptimizer(self.lr_rate * 10.).minimize(self.val_loss)
     def create_network(self,inputs,scope):
         with tf.variable_scope(scope):
-            split_0 = tflearn.conv_1d(
-                inputs[:, 0:1,:], FEATURE_NUM,1, activation='relu')
-            split_1 = tflearn.conv_1d(
-                inputs[:, 1:2,:], FEATURE_NUM,1,activation='relu')
-            split_0_flat = tflearn.flatten(split_0)
-            split_1_flat = tflearn.flatten(split_1)
-            merge_net=tflearn.merge([split_0_flat,split_1_flat], 'concat')
+            split_0 = tflearn.fully_connected(
+                inputs[:, 0:1, -1], FEATURE_NUM, activation='relu')
+            split_1 = tflearn.fully_connected(
+                inputs[:, 1:2, -1], FEATURE_NUM, activation='relu')
+            split_2 = tflearn.conv_1d(
+                inputs[:, 2:3,:], FEATURE_NUM,1, activation='relu')
+            split_3 = tflearn.conv_1d(
+                inputs[:, 3:4,:], FEATURE_NUM,1,activation='relu')
+            split_2_flat = tflearn.flatten(split_2)
+            split_3_flat = tflearn.flatten(split_3)
+            merge_net=tflearn.merge([split_0,split_1,split_2_flat,split_3_flat], 'concat')
             pi_net = tflearn.fully_connected(
                 merge_net,FEATURE_NUM, activation='relu')
             v_net = tflearn.fully_connected(

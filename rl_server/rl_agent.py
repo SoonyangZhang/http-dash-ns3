@@ -5,26 +5,38 @@ import os,time,signal,subprocess
 import numpy as np
 import random 
 import a2c_net as network
-import os
 import logging
 import file_op as fp
 import piero_message as pmsg
 BUFFER_NORM_FACTOR = 10.0 #seconds
 Mbps=1000000.0
+VIDEO_BIT_RATE_MAX=5000.0
+BYTE_NORM_FACTOR=1000000.0
 RAND_RANGE = 10000
-S_DIM = [2,5]
+S_DIM = [4,5]
 A_DIM = 6
 ACTOR_LR_RATE =1e-4
-MODEL_SAVE_INTERVAL =5
-model_dir="model_data/"
+MODEL_SAVE_INTERVAL =200
+PRINT_LOG_INTERVAL=100
+TRAIN_RECORD_DIR="train_record/"
+MODEL_DIR="model_data/"
 NS3_PATH="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/build/scratch/"
 TRAIN_BW_FOLDER="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_traces/"
 TEST_BW_FOLDER="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_test_traces/"
+VIDEO_BIT_RATE = [300.0,750.0,1200.0,1850.0,2850.0,4300.0]  # Kbps
+DEFAULT_QUALITY=1
 AGENT_MSG_STATEBATCH=0x00
 AGENT_MSG_REWARDENTROPY=0x01
 AGENT_MSG_NETPARAM=0x02
 AGENT_MSG_NS3ARGS=0x03
 AGENT_MSG_STOP=0x04
+def TimeMillis():
+    t=time.time()
+    millis=int(round(t * 1000))
+    return millis
+def TimeMillis32():
+    now=TimeMillis()&0xffffffff
+    return now
 class StateBatch:
     def __init__(self,agent_id,s_batch, a_batch, p_batch, v_batch):
         self.agent_id=agent_id
@@ -58,6 +70,7 @@ class CentralAgent(mp.Process):
         self.group_id=-1
         self.epoch=0
         self.sess=None
+        self.saver=None
         self.actor=None
         self.terminate=False
         self.state_batchs=[]
@@ -69,6 +82,7 @@ class CentralAgent(mp.Process):
         self.train_mode=True
         self.can_send_train_args=False
         self.can_send_test_args=False
+        self.fp_re=None
         self.logger = logging.getLogger("rl")
         mp.Process.__init__(self)
     def handle_signal(self, signum, frame):
@@ -94,15 +108,18 @@ class CentralAgent(mp.Process):
         for i in range(len(self.control_msg_pipes)):
             self.control_msg_pipes[i][1].close()
         num_train_traces=fp.count_files(TRAIN_BW_FOLDER)
-        num_test_traces=5#fp.count_files(TEST_BW_FOLDER)
+        num_test_traces=fp.count_files(TEST_BW_FOLDER)
         self.train_trace_id_list=[i for i in range(num_train_traces)]
         self.test_trace_id_list=[i for i in range(num_test_traces)]
-        fp.mkdir(model_dir)
+        fp.mkdir(MODEL_DIR)
+        fp.mkdir(TRAIN_RECORD_DIR)
+        pathname=TRAIN_RECORD_DIR+str(TimeMillis32())+"_reward_and_entropy.txt"
+        self.fp_re=open(pathname,"w")
         self._init_tensorflow()
-        saver= tf.train.Saver()
-        string="nn_model_all.ckpt"
-        model_recover=model_dir+string
-        if fp.check_filename_contain(model_dir,string):
+        self.saver= tf.train.Saver()
+        string="nn_model_best.ckpt"
+        model_recover=MODEL_DIR+string
+        if fp.check_filename_contain(MODEL_DIR,string):
             saver.restore(sess,model_recover)
         self.group_id=self.left
         self._write_net_param()
@@ -117,8 +134,8 @@ class CentralAgent(mp.Process):
                     break
             else:
                 self._process_test_mode()
-        saver.save(self.sess,model_recover)
         self.sess.close()
+        self.fp_re.close()
         for i in range(len(self.control_msg_pipes)):
             self.control_msg_pipes[i][0].close()
         if self.terminate:
@@ -141,12 +158,17 @@ class CentralAgent(mp.Process):
             v_batch = np.vstack(g)
             self.group_id+=1
             self.epoch+=1
-            self.logger.debug("train {}".format(self.group_id))
+            if self.epoch%PRINT_LOG_INTERVAL==1:
+                self.logger.debug("train {}".format(self.group_id))
+            if self.epoch%1000==1:
+                self.fp_re.flush()
             self.actor.train(self.sess,s_batch, a_batch, p_batch, v_batch, self.epoch)
             if self.group_id <self.right:
                 self._write_net_param()
                 self.can_send_train_args=True
                 if self.epoch%MODEL_SAVE_INTERVAL==0:
+                    #pathname=MODEL_DIR+"nn_model_{}.txt".format(self.epoch)
+                    #self.saver.save(self.sess,pathname)
                     self.train_mode=False
                     self.reward_entropy_list=[]
                     self.test_trace_index=0
@@ -170,7 +192,8 @@ class CentralAgent(mp.Process):
         for i in range(sz):
             rewards.append(self.reward_entropy_list[i].reward)
             entropys.append(self.reward_entropy_list[i].entropy)
-        self.logger.debug("reward {} entropy {}".format(np.min(rewards),np.min(entropys)))
+        out=str(self.epoch)+"\t"+str(np.min(rewards))+"\t"+str(np.min(entropys))+"\n"
+        self.fp_re.write(out)
     def _check_control_msg_pipe(self):
         for i in range(len(self.control_msg_pipes)):
             if self.control_msg_pipes[i][0].poll(0):
@@ -263,21 +286,23 @@ class Agent(object):
             self.actor=network.Network(self.s_dim,self.a_dim,self.lr_rate,scope)
             init = tf.global_variables_initializer() 
             self.sess.run(init)
-    def process_request(self,info):
+    def process_request(self,msg):
+        info=pmsg.RequestInfo()
+        info.decode(msg.buffer)
         if self.train_or_test:
-            return self._train_process_request(info)
+            return self._train_process_request(info,msg.fd)
         else:
-            return self._test_process_request(info)
-    def _train_process_request(self,info):
+            return self._test_process_request(info,msg.fd)
+    def _train_process_request(self,info,fd):
         res=None
         done=False
         if info and info.group_id!=self.group_id:
             ## where is the request come from?
-            res=self._step_action(info.fd,0,1)
+            res=self._step_action(fd,DEFAULT_QUALITY,1)
         if info and info.group_id==self.group_id and info.request_id==0:
             # the lowest bit rate of first chunk
             self._update_state(info)
-            res=self._step_action(info.fd,0,0)
+            res=self._step_action(fd,DEFAULT_QUALITY,0)
         if info and info.group_id==self.group_id and info.request_id!=0:
             self._update_state(info)
             if not info.last:
@@ -295,7 +320,7 @@ class Agent(object):
                 action_cumsum = np.cumsum(action_prob)
                 choice = (action_cumsum > np.random.randint(
                     1, RAND_RANGE) / float(RAND_RANGE)).argmax()
-                res=self._step_action(info.fd,choice,0)
+                res=self._step_action(fd,choice,0)
                 self.last_action=choice
                 self.last_prob=action_prob
             if info.last:
@@ -303,18 +328,16 @@ class Agent(object):
                 v_batch = self.actor.compute_v(self.sess,self.s_batch, self.a_batch, self.r_batch, done)
                 batch=StateBatch(self.agent_id,self.s_batch, self.a_batch, self.p_batch, v_batch)
                 self.context.send_state_batch(batch)
-                if self.group_id%10==0:
-                    self.logger.debug("{} {}".format(self.agent_id,self.group_id))
         return res
-    def _test_process_request(self,info):
+    def _test_process_request(self,info,fd):
         res=None
         if info and info.group_id!=self.group_id:
             ## where is the requese come from?
-            res=self._step_action(info.fd,0,1)
+            res=self._step_action(fd,DEFAULT_QUALITY,1)
         if info and info.group_id==self.group_id and info.request_id==0:
             # the lowest bit rate of first chunk
             self._update_state(info)
-            res=self._step_action(info.fd,0,0)
+            res=self._step_action(fd,DEFAULT_QUALITY,0)
         if info and info.group_id==self.group_id and info.request_id!=0:
             self._update_state(info)
             if not self.first_sample:
@@ -327,7 +350,7 @@ class Agent(object):
                 choice= np.argmax(np.log(action_prob) + noise)
                 entropy= -np.dot(action_prob, np.log(action_prob))
                 self.entropy_record.append(entropy)
-                res=self._step_action(info.fd,choice,0)
+                res=self._step_action(fd,choice,0)
             if info.last:
                 mean_reward=np.mean(self.r_batch)
                 mean_entropy=np.mean(self.entropy_record)
@@ -350,6 +373,9 @@ class Agent(object):
         self.ns3=subprocess.Popen(cmd,shell =True)
     def reset_state(self):
         self.state = np.zeros((self.s_dim[0], self.s_dim[1]),dtype=np.float32)
+        bitrate=1.0*VIDEO_BIT_RATE[DEFAULT_QUALITY]/VIDEO_BIT_RATE_MAX
+        for j in range(self.s_dim[1]):
+            self.state[0,j]=bitrate
         self.s_batch=[]
         self.a_batch=[]
         self.p_batch=[]
@@ -359,14 +385,19 @@ class Agent(object):
         self.last_prob=[]
         self.first_sample=True
     def _update_state(self,info):
+        bitrate=1.0*VIDEO_BIT_RATE[info.last_quality]/VIDEO_BIT_RATE_MAX
+        buffer_s=1.0*info.buffer_level/1000.0/BUFFER_NORM_FACTOR
         throughput=0.0
-        buffer_s=1.0*info.buffer/1000.0/BUFFER_NORM_FACTOR
         if info.delay>0:
             throughput=float(info.last_bytes*8*1000.0)/info.delay
             throughput=throughput/Mbps
         state = np.roll(self.state, -1, axis=1)
-        state[0,-1]=throughput
+        state[0,-1]=bitrate
         state[1,-1]=buffer_s
+        state[2,-1]=throughput
+        for j in range(self.s_dim[1]):
+            chunk_size=1.0*info.segment_list[j]/BYTE_NORM_FACTOR
+            state[3,j]=chunk_size
         self.state = state
     def _step_action(self,fd,choice,stop):
         res=pmsg.ResponceInfo(fd,choice,stop)
@@ -433,17 +464,17 @@ class AgentManager(mp.Process):
                 deadbeaf=True
         return deadbeaf
     def _check_state_pipe(self):
-        info=None
+        msg=None
         res=None
         if self.state_pipe[1].poll(0):
             try:
-                info=self.state_pipe[1].recv()
+                msg=self.state_pipe[1].recv()
             except EOFError:
-                self.logger.debug("info error")
-        if info:
-            index=info.agent_id-self.first_id
+                self.logger.debug("msg error")
+        if msg:
+            index=msg.agent_id-self.first_id
             if index>=0:
-                res=self.agents[index].process_request(info)
+                res=self.agents[index].process_request(msg)
                 if res:
                     self.state_pipe[1].send(res)
     def _process_ns3_args(self,msg):

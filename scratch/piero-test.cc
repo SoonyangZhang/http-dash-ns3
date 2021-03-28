@@ -195,6 +195,14 @@ int main(int argc, char *argv[]){
         std::string name=video_path+video_name+std::to_string(i);
         video_log.push_back(name);
     }
+    /*{
+        struct VideoData video_data;
+        video_data.segmentDuration=4000;
+        ReadSegmentFromFile(video_log,video_data);
+        for (int i=0;i<video_data.averageBitrate.size();i++){
+            std::cout<<video_data.averageBitrate.at(i)/1000<<std::endl;
+        }
+    }*/
     float VIDEO_BIT_RATE[]={300,750,1200,1850,2850,4300}; //kbps
     std::vector<double> average_rate;
     for (int i=0;i<n;i++){
@@ -252,7 +260,7 @@ int main(int argc, char *argv[]){
         if(train.compare("true")==0){
             is_train=true;
         }
-        test_rl_algorithm(video_log,average_rate,group_id,agent_id,bandwith_id,bandwidth_sample,is_train);
+        test_rl_algorithm(video_log,average_rate,group_id,agent_id,bandwith_id,bandwidth_sample);
     }else{
         const char *algo[]={"festive","panda","tobasco","osmp","raahs","fdash","sftm","svaa"};
         int n=sizeof(algo)/sizeof(algo[0]);
@@ -260,20 +268,20 @@ int main(int argc, char *argv[]){
         if(bandwidth_trace.compare("oboe")==0){
             result_folder=std::string("oboe");
         }
-        for(int i=0;i<1/*bw_traces.size()*/;i++){
+        for(int i=0;i<bw_traces.size();i++){
             DatasetDescriptation bandwidth_sample=bw_traces.at(i);
             auto temp_id=std::to_string(i);
             for(int j=0;j<n;j++){
                 std::string algorithm(algo[j]);
-                test_algorithm(video_log,average_rate,group_id,agent_id,temp_id,another_sample/*bandwidth_sample*/,
+                test_algorithm(video_log,average_rate,group_id,agent_id,temp_id,bandwidth_sample,
                                 algorithm,result_folder);
             }
         }
     }
     uint64_t delta=TimeMillis()-last_time;
     double seconds=1.0*delta/1000;
-    if(reinforce.compare("true")==0){
+    /*if(reinforce.compare("true")==0){
         NS_LOG_INFO(train<<" "<<group_id<<" "<<agent_id<<" "<<bandwith_id<<" "<<seconds);
-    }
+    }*/
     return 0;
 }

@@ -26,29 +26,19 @@ class TcpPeer(object):
         reader.append(self.buffer)
         all=len(self.buffer)
         sum,success=reader.read_varint()
-        sum_bytes=bc.varient_length(sum)
         remain=b''
         close=False
         if success and sum>0:
+            sum_bytes=all-reader.byte_remain()
             if sum<=reader.byte_remain():
                 type,_=reader.read_uint8()
                 last,_=reader.read_uint8()
-                request_id,_=reader.read_uint32()
-                send_time,_=reader.read_uint64()
-                group_id,_=reader.read_uint32()
-                agent_id,_=reader.read_uint32()
-                actions,_=reader.read_uint32()
-                last_bytes,_=reader.read_uint64()
-                delay,_=reader.read_uint64()
-                buffer,_=reader.read_uint64()
-                reward,_=reader.read_double()
-                t=time.time()
-                receipt_time=int(round(t * 1000))
-                info=pmsg.RequestInfo(self.conn.fileno(),last,request_id,send_time,group_id,agent_id,actions,last_bytes,delay,buffer,reward)
-                pos=reader.cursor()
+                mid,_=reader.read_varint()
+                agent_id,_=reader.read_varint()
+                message=pmsg.MessageBufferWrap(self.conn.fileno(),agent_id,self.buffer[0:sum+sum_bytes])
                 if sum+sum_bytes<all:
                     remain=self.buffer[sum+sum_bytes:all]
-                self.server.handele_request(info)
+                self.server.handele_request(message)
                 self.buffer=remain
             return close
     def send_responce(self,res):
@@ -120,11 +110,9 @@ class TcpServer():
         self._socket.listen(128)
         self._epl= select.epoll()
         self._epl.register(self._socket.fileno(),select.EPOLLIN)
-    def handele_request(self,info):
-        aid=info.agent_id
-        #self.logger.debug("info {} {}".format(aid,info.request_id))
-        index=int(info.agent_id/self.id_span)
-        self.state_pipes[index][0].send(info)
+    def handele_request(self,message):
+        index=int(message.agent_id/self.id_span)
+        self.state_pipes[index][0].send(message)
     def check_pipe(self):
         for i in range(len(self.state_pipes)):
             res=None
@@ -196,7 +184,7 @@ Terminate=False
 def signal_handler(signum, frame):
     global Terminate
     Terminate =True
-def multi_thread(num_agent,id_span,left,right,pathnames):
+def multi_thread(num_agent,id_span,left,right):
     state_pipes=[]
     control_msg_pipes=[]
     managers=[]
@@ -235,17 +223,10 @@ def multi_thread(num_agent,id_span,left,right,pathnames):
 def start_train():
     NUM_AGENTS=8
     id_span=4
-    TRAIN_EPOCH =10
-    train_record_dir="train_record/"
-    model_dir="model_data/"
-    fp.remove_dir(model_dir)
-    fp.mkdir(train_record_dir)
-    pathnames=[]
-    delimiter="_"
-    for i in range(NUM_AGENTS):
-        name=train_record_dir+"train"+delimiter+str(i+1)+".txt"
-        pathnames.append(name)
-    multi_thread(NUM_AGENTS,id_span,0,TRAIN_EPOCH,pathnames)
+    TRAIN_EPOCH =200000
+    fp.remove_dir(ra.MODEL_DIR)
+    fp.remove_dir(ra.TRAIN_RECORD_DIR)
+    multi_thread(NUM_AGENTS,id_span,0,TRAIN_EPOCH)
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)

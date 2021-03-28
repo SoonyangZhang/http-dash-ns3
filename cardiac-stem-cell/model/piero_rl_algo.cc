@@ -67,10 +67,10 @@ agent_id_(agent_id){
 ReinforceAlgorithm::~ReinforceAlgorithm(){
     CloseFd();
 }
-AlgorithmReply ReinforceAlgorithm::GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count){
+AlgorithmReply ReinforceAlgorithm::GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int index){
     AlgorithmReply reply;
     if(sockfd_>0){
-        SendRequestMessage(client,reply,0);
+        SendRequestMessage(client,reply,index,0);
     }else{
         reply.terminate=true;
     }
@@ -79,36 +79,26 @@ AlgorithmReply ReinforceAlgorithm::GetNextQuality(PieroDashClient *client,Time n
 void ReinforceAlgorithm::LastSegmentArrive(PieroDashClient *client){
     if(sockfd_>0){
          AlgorithmReply reply;
-         SendRequestMessage(client,reply,1);
+         SendRequestMessage(client,reply,-1,1);
     }
 }
-//Request:type(uint8_t)+request_id(int)+group_id(int)+agent_id(int)+actions(int)+bytes(uint64_t)+time_ms(uint64_t)+buffer(uint64_t)
-bool ReinforceAlgorithm::SendRequestMessage(PieroDashClient *client,AlgorithmReply &reply,uint8_t last){
+bool ReinforceAlgorithm::SendRequestMessage(PieroDashClient *client,AlgorithmReply &reply,int index,uint8_t last){
     const VideoData & video_data=client->get_video_data();
     const ThroughputData &throughput=client->get_throughput();
-    int64_t buffer_ms=client->get_buffer_level_ms();
-    int actions=video_data.representation.size();
+    int choice_sz=video_data.representation.size();
     const std::deque<std::pair<double,double>> &qoe=client->get_reward();
-    double r=0.0;
-    {
-        size_t n=qoe.size();
-        if(n>0){
-            r=qoe.at(n-1).first;
-        }
-    }
-    uint64_t r_buffer=0;
-    memcpy((void*)&r_buffer,(void*)&r,sizeof(uint64_t));
     char buffer[kBufferSize];
     DataWriter writer(buffer,kBufferSize);
     uint8_t type=RL_REQUEST;
-    uint64_t bytes=0;
-    uint64_t time_ms=0;
-    uint64_t send_time=TimeMillis();
-    int info_size=sizeof(type)+sizeof(last)+sizeof(int)+sizeof(send_time)+
-                 sizeof(int)+sizeof(int)+sizeof(int)+
-                 sizeof(bytes)+sizeof(time_ms)+sizeof(buffer_ms)+
-                 sizeof(uint64_t);
-    uint64_t sum=info_size;
+    uint32_t mid=request_id_;
+    uint32_t aid=agent_id_;
+    uint32_t gid=group_id_;
+    uint8_t  last_bitrate_i=last_quality_;
+    uint8_t actions=choice_sz;
+    uint32_t bytes=0;
+    uint32_t time_ms=0;
+    int32_t buffer_ms=client->get_buffer_level_ms();
+    uint64_t r_buffer=0;
     {
         size_t n=throughput.bytesReceived.size();
         if(n>0){
@@ -118,24 +108,50 @@ bool ReinforceAlgorithm::SendRequestMessage(PieroDashClient *client,AlgorithmRep
             time_ms=(end-start).GetMilliSeconds();
         }
     }
-    bool success=writer.WriteVarInt(sum)&&
-                 writer.WriteUInt8(type)&&
-                 writer.WriteUInt8(last)&&
-                 writer.WriteUInt32(request_id_)&&
-                 writer.WriteUInt64(send_time)&&
-                 writer.WriteUInt32(group_id_)&&
-                 writer.WriteUInt32(agent_id_)&&
-                 writer.WriteUInt32(actions)&&
-                 writer.WriteUInt64(bytes)&&
-                 writer.WriteUInt64(time_ms)&&
-                 writer.WriteUInt64(buffer_ms)&&
-                 writer.WriteUInt64(r_buffer);
+    double r=0.0;
+    {
+        size_t n=qoe.size();
+        if(n>0){
+            r=qoe.at(n-1).first;
+        }
+    }
+    memcpy((void*)&r_buffer,(void*)&r,sizeof(uint64_t));
+    int info_size=sizeof(type)+sizeof(last)+
+            DataWriter::GetVarIntLen(mid)+
+            DataWriter::GetVarIntLen(aid)+
+            DataWriter::GetVarIntLen(gid)+
+            sizeof(last_bitrate_i)+
+            sizeof(actions)+sizeof(uint32_t)*actions+
+            sizeof(bytes)+sizeof(time_ms)+
+            sizeof(buffer_ms)+sizeof(r_buffer);
+    bool success=writer.WriteVarInt(info_size)&&
+                writer.WriteUInt8(type)&&
+                writer.WriteUInt8(last)&&
+                writer.WriteVarInt(mid)&&
+                writer.WriteVarInt(aid)&&
+                writer.WriteVarInt(gid)&&
+                writer.WriteUInt8(last_bitrate_i)&&
+                writer.WriteUInt8(actions);
+    int segments=video_data.representation[0].size();
+    for(int i=0;i<(int)actions;i++){
+        uint32_t segment_size=0;
+        if(index>=0&&index<segments){
+            segment_size=video_data.representation[i].at(index);
+        }
+        writer.WriteUInt32(segment_size);
+    }
+    success=writer.WriteUInt32(bytes)&&
+            writer.WriteUInt32(time_ms)&&
+            writer.WriteUInt32(buffer_ms)&&
+            writer.WriteUInt64(r_buffer);
     if(success){
         write(sockfd_,buffer,writer.length());
         if(!last){
             GetReply(reply);
+            last_quality_=reply.nextQuality;
             if(reply.nextQuality>=actions){
                 reply.nextQuality=actions-1;
+                last_quality_=reply.nextQuality;
             }
         }
     }

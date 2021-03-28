@@ -13,9 +13,10 @@ const double kRebufPenality=4.3;
 extern const char *g_rl_server_ip;
 extern uint16_t g_rl_server_port;
 static volatile bool g_running=true;
+static int kDefaultQuality=1;
 struct AlgorithmReply
 {
-  AlgorithmReply():nextQuality(0),nextDownloadDelay(Time(0)),
+  AlgorithmReply():nextQuality(kDefaultQuality),nextDownloadDelay(Time(0)),
   terminate(false){}
   int nextQuality;
   Time nextDownloadDelay;
