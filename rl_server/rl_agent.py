@@ -4,7 +4,8 @@ import multiprocessing as mp
 import os,time,signal,subprocess
 import numpy as np
 import random 
-import a2c_net as network
+#import a2c_net as network
+import ppo_net as network
 import logging
 import file_op as fp
 import piero_message as pmsg
@@ -13,7 +14,7 @@ Mbps=1000000.0
 VIDEO_BIT_RATE_MAX=5000.0
 BYTE_NORM_FACTOR=1000000.0
 RAND_RANGE = 10000
-S_DIM = [4,5]
+S_DIM = [6,8]
 A_DIM = 6
 ACTOR_LR_RATE =1e-4
 MODEL_SAVE_INTERVAL =200
@@ -25,6 +26,7 @@ TRAIN_BW_FOLDER="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_traces/
 TEST_BW_FOLDER="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_test_traces/"
 VIDEO_BIT_RATE = [300.0,750.0,1200.0,1850.0,2850.0,4300.0]  # Kbps
 DEFAULT_QUALITY=1
+CHUNK_TIL_VIDEO_END_CAP =50.0
 AGENT_MSG_STATEBATCH=0x00
 AGENT_MSG_REWARDENTROPY=0x01
 AGENT_MSG_NETPARAM=0x02
@@ -192,7 +194,7 @@ class CentralAgent(mp.Process):
         for i in range(sz):
             rewards.append(self.reward_entropy_list[i].reward)
             entropys.append(self.reward_entropy_list[i].entropy)
-        out=str(self.epoch)+"\t"+str(np.min(rewards))+"\t"+str(np.min(entropys))+"\n"
+        out=str(self.epoch)+"\t"+str(np.mean(rewards))+"\t"+str(np.mean(entropys))+"\n"
         self.fp_re.write(out)
     def _check_control_msg_pipe(self):
         for i in range(len(self.control_msg_pipes)):
@@ -317,9 +319,11 @@ class Agent(object):
             if not info.last:
                 action_prob = self.actor.predict(self.sess,
                     np.reshape(self.state, (1, self.s_dim[0],self.s_dim[1])))
-                action_cumsum = np.cumsum(action_prob)
-                choice = (action_cumsum > np.random.randint(
-                    1, RAND_RANGE) / float(RAND_RANGE)).argmax()
+                #action_cumsum = np.cumsum(action_prob)
+                #choice = (action_cumsum > np.random.randint(
+                #    1, RAND_RANGE) / float(RAND_RANGE)).argmax()
+                noise = np.random.gumbel(size=len(action_prob))
+                choice= np.argmax(np.log(action_prob) + noise)
                 res=self._step_action(fd,choice,0)
                 self.last_action=choice
                 self.last_prob=action_prob
@@ -388,17 +392,24 @@ class Agent(object):
         bitrate=1.0*VIDEO_BIT_RATE[info.last_quality]/VIDEO_BIT_RATE_MAX
         buffer_s=1.0*info.buffer_level/1000.0/BUFFER_NORM_FACTOR
         throughput=0.0
+        delay_s=0.0
         if info.delay>0:
             throughput=float(info.last_bytes*8*1000.0)/info.delay
+            delay_s=1.0*info.delay/1000.0/BUFFER_NORM_FACTOR
             throughput=throughput/Mbps
-        state = np.roll(self.state, -1, axis=1)
-        state[0,-1]=bitrate
-        state[1,-1]=buffer_s
-        state[2,-1]=throughput
-        for j in range(self.s_dim[1]):
-            chunk_size=1.0*info.segment_list[j]/BYTE_NORM_FACTOR
-            state[3,j]=chunk_size
-        self.state = state
+        self.state = np.roll(self.state, -1, axis=1)
+        self.state[0,-1]=bitrate
+        self.state[1,-1]=buffer_s
+        self.state[2,-1]=throughput
+        self.state[3,-1]=delay_s
+        next_video_chunk_sizes=[]
+        for i in range(0,len(info.segment_list)):
+            chunk_size=1.0*info.segment_list[i]/BYTE_NORM_FACTOR
+            next_video_chunk_sizes.append(chunk_size)
+        self.state[4,:self.a_dim]= np.array(next_video_chunk_sizes)
+        self.state[5, -1] = np.minimum(1.0*info.request_id, CHUNK_TIL_VIDEO_END_CAP) / float(CHUNK_TIL_VIDEO_END_CAP)
+        #print(info.request_id,info.buffer_level)
+        #print(self.state)
     def _step_action(self,fd,choice,stop):
         res=pmsg.ResponceInfo(fd,choice,stop)
         return res
