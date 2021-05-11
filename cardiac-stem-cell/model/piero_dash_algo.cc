@@ -35,7 +35,7 @@ target_buffer_(target),horizon_(horizon),delta_(delta){
     random_->SetStream(12321);
     bandwidth_predicator_.reset(new BandwidthPredicator());
 }
-AlgorithmReply FestiveAlgorithm::GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count){
+AlgorithmReply FestiveAlgorithm::GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count){
     const VideoData & video_data=client->get_video_data();
     const ThroughputData &throughput=client->get_throughput();
     const  std::deque<int> &history_quality=client->get_history_quality();
@@ -142,7 +142,7 @@ m_alpha (0.2),
 m_beta (0.2),
 m_epsilon (0.15),
 m_bMin (26){}
-AlgorithmReply PandaAlgorithm::GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count){
+AlgorithmReply PandaAlgorithm::GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count){
     const VideoData & video_data=client->get_video_data();
     const ThroughputData &throughput=client->get_throughput();
     //const  std::deque<int> &history_quality=client->get_history_quality();
@@ -241,7 +241,7 @@ int PandaAlgorithm::FindLargest (const VideoData & video_data,const double smoot
 TobascoAlgorithm::TobascoAlgorithm(){
     m_running_fast_start = true;
 }
-AlgorithmReply TobascoAlgorithm::GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count){
+AlgorithmReply TobascoAlgorithm::GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count){
     AlgorithmReply reply;
     if(segment_count==0){
         return reply;
@@ -343,7 +343,7 @@ bool TobascoAlgorithm::BufferInc(const BufferData&buffer_data){
     }
     return true;
 }
-AlgorithmReply OsmpAlgorithm::GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count){
+AlgorithmReply OsmpAlgorithm::GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count){
     const VideoData & video_data=client->get_video_data();
     const ThroughputData &throughput=client->get_throughput();
     //const  std::deque<int> &history_quality=client->get_history_quality(); 
@@ -389,7 +389,7 @@ AlgorithmReply OsmpAlgorithm::GetNextQuality(PieroDashClient *client,Time now,in
     return reply;
 }
 RaahsAlgorithm::RaahsAlgorithm():t_min_ms_(9000){}
-AlgorithmReply RaahsAlgorithm::GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count){
+AlgorithmReply RaahsAlgorithm::GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count){
     const VideoData & video_data=client->get_video_data();
     const ThroughputData &throughput=client->get_throughput();
     //const  std::deque<int> &history_quality=client->get_history_quality();
@@ -443,7 +443,7 @@ AlgorithmReply RaahsAlgorithm::GetNextQuality(PieroDashClient *client,Time now,i
     }
     return reply;
 }
-AlgorithmReply FdashAlgorithm::GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count){
+AlgorithmReply FdashAlgorithm::GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count){
     AlgorithmReply reply;
     if(segment_count==0){
         return reply;
@@ -562,7 +562,7 @@ AlgorithmReply FdashAlgorithm::GetNextQuality(PieroDashClient *client,Time now,i
     reply.nextQuality =next_quality;
     return reply;
 }
-AlgorithmReply SftmAlgorithm::GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count){
+AlgorithmReply SftmAlgorithm::GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count){
     AlgorithmReply reply;
     if(segment_count==0){
         return reply;
@@ -632,7 +632,7 @@ AlgorithmReply SftmAlgorithm::GetNextQuality(PieroDashClient *client,Time now,in
     return reply;
 }
 SvaaAlgorithm::SvaaAlgorithm(int64_t target_buffer):target_buffer_(target_buffer),m_m_k_1 (0), m_m_k_2 (0), m_counter (0){}
-AlgorithmReply SvaaAlgorithm::GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count){
+AlgorithmReply SvaaAlgorithm::GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count){
     AlgorithmReply reply;
     if(segment_count==0){
         return reply;

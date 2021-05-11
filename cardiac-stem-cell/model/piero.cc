@@ -7,7 +7,7 @@
 namespace ns3{
 NS_LOG_COMPONENT_DEFINE("piero");
 const int kPacketSize=1500;
-int CountLines(std::string &name){
+int count_file_lines(std::string &name){
     FILE *fp=fopen(name.c_str(), "r");
     char c;
     int lines=0;
@@ -22,7 +22,7 @@ int CountLines(std::string &name){
     fclose(fp);
     return lines;
 }
-void Split(std::string &line,std::vector<std::string>&numbers){
+void buffer_split(std::string &line,std::vector<std::string>&numbers){
     int n=line.size();
     int start=-1;
     int stop=-1;
@@ -135,7 +135,7 @@ PieroBiChannel::~PieroBiChannel(){
 void PieroBiChannel::SendPacket(PieroSocket *socket,PieroPacket *packet,Time delay){
     if(a_==socket){
         link_b_->Send(packet,delay);
-    }else if(b_=socket){
+    }else if(b_==socket){
         link_a_->Send(packet,delay);
     }else{
         delete packet;
@@ -203,7 +203,7 @@ void PieroTraceChannel::ReadPacketFromSocket(PieroSocket *socket,PieroPacket *pa
 void PieroTraceChannel::SetBandwidthTrace(DatasetDescriptation &des,Time interval){
     if(bw_trace_.is_open()) {return ;}
     des_=des;
-    lines_=CountLines(des.name);
+    lines_=count_file_lines(des.name);
     trace_time_[0]=Time(0);
     trace_time_[1]=interval;
     type_=des.type;
@@ -308,7 +308,7 @@ bool PieroTraceChannel::UpdateBandwidth(uint8_t index){
         getline(bw_trace_,buffer);
         if(RateTraceType::TIME_BW==type_){
             std::vector<std::string> numbers;
-            Split(buffer,numbers);
+            buffer_split(buffer,numbers);
             if(numbers.size()<2){
                 return ret;
             }

@@ -13,6 +13,35 @@ The throughput and delay of a channel is based on collected trace.
 Nothing is real, and do not take it seriously.
 */
 namespace ns3{
+int count_file_lines(std::string &name);
+void buffer_split(std::string &line,std::vector<std::string>&numbers);
+enum RateTraceType{
+    NONE,
+    TIME_BW,
+    BW,
+};
+enum RateUnit{
+    BW_bps,
+    BW_Kbps,
+    BW_Mbps,
+};
+enum TimeUnit{
+    TIME_MS,
+    TIME_S,
+};
+struct DatasetDescriptation{
+DatasetDescriptation(){}
+DatasetDescriptation(std::string a1,RateTraceType a2,
+            TimeUnit a3,RateUnit a4)
+:name(a1),
+type(a2),
+time_unit(a3),
+rate_unit(a4){}
+std::string name;
+RateTraceType type;
+TimeUnit time_unit;
+RateUnit rate_unit;
+};
 class PieroPacket{
 public:
     PieroPacket():PieroPacket(0,0,0,0,0){}
@@ -98,34 +127,6 @@ private:
     Ptr<PieroChannelToSink> link_b_;
     Ptr<PieroSocket> a_;
     Ptr<PieroSocket> b_;
-};
-int CountLines(std::string &name);
-enum RateTraceType{
-    NONE,
-    TIME_BW,
-    BW,
-};
-enum RateUnit{
-    BW_bps,
-    BW_Kbps,
-    BW_Mbps,
-};
-enum TimeUnit{
-    TIME_MS,
-    TIME_S,
-};
-struct DatasetDescriptation{
-DatasetDescriptation(){}
-DatasetDescriptation(std::string a1,RateTraceType a2,
-            TimeUnit a3,RateUnit a4)
-:name(a1),
-type(a2),
-time_unit(a3),
-rate_unit(a4){}
-std::string name;
-RateTraceType type;
-TimeUnit time_unit;
-RateUnit rate_unit;
 };
 class StopBroadcast{
 public:

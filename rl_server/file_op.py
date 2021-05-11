@@ -9,6 +9,8 @@ def remove_dir(top):
             os.remove(os.path.join(root, name))
         for name in dirs:
             os.rmdir(os.path.join(root, name))
+    if os.path.exists(top):
+        os.rmdir(top)
 def get_files_name(folder):
     list=[]
     num_files_rec=0

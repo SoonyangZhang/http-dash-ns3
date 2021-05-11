@@ -8,11 +8,13 @@
 #include <arpa/inet.h>  //inet_addr  
 #include <netinet/tcp.h> //TCP_NODELAY
 #include <fcntl.h>
+#include "ns3/core-module.h"
+#include "ns3/log.h"
+
 #include "piero_rl_algo.h"
 #include "piero_dash_client.h"
 #include "piero_byte_codec.h"
-#include "ns3/core-module.h"
-#include "ns3/log.h"
+#include "piero_param_config.h"
 namespace ns3{
 NS_LOG_COMPONENT_DEFINE("piero_rl");
 const char *g_rl_server_ip="127.0.0.1";
@@ -20,6 +22,12 @@ uint16_t g_rl_server_port=1234;
 const int kBufferSize=2000;
 const int kMSS=1492;
 const char kPaddingData[1500]={0};
+void piero_set_rl_server_ip(const char *ip){
+    g_rl_server_ip=ip;
+}
+void piero_set_rl_server_port(uint16_t port){
+    g_rl_server_port=port;
+}
 enum MessageType{
     RL_REQUEST,
     RL_RESPONSE,
@@ -67,7 +75,7 @@ agent_id_(agent_id){
 ReinforceAlgorithm::~ReinforceAlgorithm(){
     CloseFd();
 }
-AlgorithmReply ReinforceAlgorithm::GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int index){
+AlgorithmReply ReinforceAlgorithm::GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int index){
     AlgorithmReply reply;
     if(sockfd_>0){
         SendRequestMessage(client,reply,index,0);
@@ -76,13 +84,13 @@ AlgorithmReply ReinforceAlgorithm::GetNextQuality(PieroDashClient *client,Time n
     }
     return reply;
 }
-void ReinforceAlgorithm::LastSegmentArrive(PieroDashClient *client){
+void ReinforceAlgorithm::LastSegmentArrive(PieroDashBase *client){
     if(sockfd_>0){
          AlgorithmReply reply;
          SendRequestMessage(client,reply,-1,1);
     }
 }
-bool ReinforceAlgorithm::SendRequestMessage(PieroDashClient *client,AlgorithmReply &reply,int index,uint8_t last){
+bool ReinforceAlgorithm::SendRequestMessage(PieroDashBase *client,AlgorithmReply &reply,int index,uint8_t last){
     const VideoData & video_data=client->get_video_data();
     const ThroughputData &throughput=client->get_throughput();
     int choice_sz=video_data.representation.size();

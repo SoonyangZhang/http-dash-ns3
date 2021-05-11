@@ -4,6 +4,7 @@ import multiprocessing as mp
 import os,time,signal,subprocess
 import numpy as np
 import random 
+import heapq
 #import a2c_net as network
 import ppo_net as network
 import logging
@@ -17,10 +18,11 @@ RAND_RANGE = 10000
 S_DIM = [6,8]
 A_DIM = 6
 ACTOR_LR_RATE =1e-4
-MODEL_SAVE_INTERVAL =200
+MODEL_SAVE_INTERVAL =100
 PRINT_LOG_INTERVAL=100
 TRAIN_RECORD_DIR="train_record/"
 MODEL_DIR="model_data/"
+PRETRAIN_MODEL_DIR="pretrain_dir/"
 NS3_PATH="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/build/scratch/"
 TRAIN_BW_FOLDER="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_traces/"
 TEST_BW_FOLDER="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_test_traces/"
@@ -32,6 +34,7 @@ AGENT_MSG_REWARDENTROPY=0x01
 AGENT_MSG_NETPARAM=0x02
 AGENT_MSG_NS3ARGS=0x03
 AGENT_MSG_STOP=0x04
+MODEL_RECORD_WINDOW=10
 def TimeMillis():
     t=time.time()
     millis=int(round(t * 1000))
@@ -59,6 +62,16 @@ class Ns3Args:
         self.train_or_test=train_or_test
         self.group_id=group_id
         self.trace_id_list=trace_id_list
+class ModelInfo():
+    def __init__(self,epoch,reward,entropy):
+        self.epoch=epoch
+        self.reward=reward
+        self.entropy=entropy
+    def __lt__(self, other):
+        if self.reward<other.reward:
+            return True
+        else:
+            return False
 class CentralAgent(mp.Process):
     def __init__(self,num_agent,id_span,left,right,control_msg_pipes):
         self.num_agent=num_agent
@@ -85,6 +98,7 @@ class CentralAgent(mp.Process):
         self.can_send_train_args=False
         self.can_send_test_args=False
         self.fp_re=None
+        self.model_info_heap=[]
         self.logger = logging.getLogger("rl")
         mp.Process.__init__(self)
     def handle_signal(self, signum, frame):
@@ -118,11 +132,15 @@ class CentralAgent(mp.Process):
         pathname=TRAIN_RECORD_DIR+str(TimeMillis32())+"_reward_and_entropy.txt"
         self.fp_re=open(pathname,"w")
         self._init_tensorflow()
-        self.saver= tf.train.Saver()
-        string="nn_model_best.ckpt"
-        model_recover=MODEL_DIR+string
-        if fp.check_filename_contain(MODEL_DIR,string):
-            saver.restore(sess,model_recover)
+        self.saver= tf.train.Saver(max_to_keep=2*MODEL_RECORD_WINDOW)
+        if os.path.exists(PRETRAIN_MODEL_DIR):
+            name="nn_model.ckpt"
+            model_recover=PRETRAIN_MODEL_DIR+name            
+            if fp.check_filename_contain(PRETRAIN_MODEL_DIR,name):
+                self.logger.debug("model recover")
+                self.saver.restore(self.sess,model_recover)
+            else:
+                self.logger.debug("no model")
         self.group_id=self.left
         self._write_net_param()
         self.can_send_train_args=True
@@ -142,6 +160,13 @@ class CentralAgent(mp.Process):
             self.control_msg_pipes[i][0].close()
         if self.terminate:
             self.logger.debug("terminate signal")
+        pathname=MODEL_DIR+"model_info.txt"
+        model_info_file=open(pathname,"w")
+        for i in range(len(self.model_info_heap)):
+            info=self.model_info_heap[i]
+            model_info_file.write(str(info.epoch)+"\t"+str(info.reward)+"\t"+
+                                  str(info.entropy)+"\n")
+        model_info_file.close()
     def _process_train_mode(self):
         if self.can_send_train_args:
             self._send_train_args(self.group_id)
@@ -169,8 +194,6 @@ class CentralAgent(mp.Process):
                 self._write_net_param()
                 self.can_send_train_args=True
                 if self.epoch%MODEL_SAVE_INTERVAL==0:
-                    #pathname=MODEL_DIR+"nn_model_{}.txt".format(self.epoch)
-                    #self.saver.save(self.sess,pathname)
                     self.train_mode=False
                     self.reward_entropy_list=[]
                     self.test_trace_index=0
@@ -194,8 +217,12 @@ class CentralAgent(mp.Process):
         for i in range(sz):
             rewards.append(self.reward_entropy_list[i].reward)
             entropys.append(self.reward_entropy_list[i].entropy)
-        out=str(self.epoch)+"\t"+str(np.mean(rewards))+"\t"+str(np.mean(entropys))+"\n"
+        average_reward=np.mean(rewards)
+        average_entropy=np.mean(entropys)
+        out=str(self.epoch)+"\t"+str(average_reward)+"\t"+str(average_entropy)+"\n"
         self.fp_re.write(out)
+        info=ModelInfo(self.epoch,average_reward,average_entropy)
+        self._save_model(info)
     def _check_control_msg_pipe(self):
         for i in range(len(self.control_msg_pipes)):
             if self.control_msg_pipes[i][0].poll(0):
@@ -247,6 +274,16 @@ class CentralAgent(mp.Process):
     def _stop_agents(self):
         for i in range(len(self.control_msg_pipes)):
             self.control_msg_pipes[i][0].send((AGENT_MSG_STOP,'deadbeaf'))
+    def _save_model(self,info):
+        new_dir=MODEL_DIR+str(info.epoch)+"/"
+        fp.mkdir(new_dir)
+        pathname=new_dir+"nn_model.ckpt"
+        self.saver.save(self.sess,pathname)
+        heapq.heappush(self.model_info_heap,info)
+        if len(self.model_info_heap)>MODEL_RECORD_WINDOW:
+            old_info=heapq.heappop(self.model_info_heap)
+            old_dir=MODEL_DIR+str(old_info.epoch)+"/"
+            fp.remove_dir(old_dir)
 class Agent(object):
     def __init__(self,context,agent_id):
         self.context=context

@@ -223,7 +223,7 @@ def multi_thread(num_agent,id_span,left,right):
 def start_train():
     NUM_AGENTS=8
     id_span=4
-    TRAIN_EPOCH =500000
+    TRAIN_EPOCH =200000
     fp.remove_dir(ra.MODEL_DIR)
     fp.remove_dir(ra.TRAIN_RECORD_DIR)
     multi_thread(NUM_AGENTS,id_span,0,TRAIN_EPOCH)

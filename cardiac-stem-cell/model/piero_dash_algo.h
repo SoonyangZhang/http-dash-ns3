@@ -1,6 +1,6 @@
 #include <memory>
 #include "ns3/core-module.h"
-#include "piero_dash_proto.h"
+#include "piero_misc.h"
 namespace ns3{
 class BandwidthPredicator{
 public:
@@ -10,7 +10,7 @@ public:
 class FestiveAlgorithm:public AdaptationAlgorithm{
 public:
     FestiveAlgorithm(int64_t target,int horizon,int delta);
-    AlgorithmReply GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count) override;
+    AlgorithmReply GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count) override;
 private:
     double CalculateCombineScore(int b,int b_ref,int b_cur,double predict_bandwith,
     const  std::deque<int> &history_quality,const std::vector<double> &bitrate_array);
@@ -26,7 +26,7 @@ private:
 class PandaAlgorithm:public AdaptationAlgorithm{
 public:
     PandaAlgorithm();
-    AlgorithmReply GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count) override;
+    AlgorithmReply GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count) override;
 private:
     int FindLargest (const VideoData & video_data,const double smooth_bw, const double delta);
     const double m_kappa;
@@ -46,7 +46,7 @@ private:
 class TobascoAlgorithm :public AdaptationAlgorithm{
 public:
     TobascoAlgorithm ();
-    AlgorithmReply GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count) override;
+    AlgorithmReply GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count) override;
 private:
     bool BufferInc(const BufferData&buffer_data);
     bool m_running_fast_start=true;
@@ -57,13 +57,13 @@ private:
 class OsmpAlgorithm:public AdaptationAlgorithm{
 public:
     OsmpAlgorithm (){}
-    AlgorithmReply GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count) override;  
+    AlgorithmReply GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count) override;  
 };
 //Rate adaptation for adaptive HTTP streaming
 class RaahsAlgorithm:public AdaptationAlgorithm{
 public:
     RaahsAlgorithm ();
-    AlgorithmReply GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count) override;
+    AlgorithmReply GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count) override;
 private:
     int t_min_ms_;
     double gamma_d_= 0.67; //Switch down factor
@@ -72,7 +72,7 @@ private:
 class FdashAlgorithm:public AdaptationAlgorithm{
 public:
     FdashAlgorithm(int64_t target_buffer=20000):target_buffer_(target_buffer){}
-    AlgorithmReply GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count) override;
+    AlgorithmReply GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count) override;
 private:
     int64_t target_buffer_;
     BandwidthPredicator predicator_;
@@ -81,7 +81,7 @@ private:
 class SftmAlgorithm:public AdaptationAlgorithm{
 public:
     SftmAlgorithm(int64_t target_buffer=20000):target_buffer_(target_buffer){}
-    AlgorithmReply GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count) override;
+    AlgorithmReply GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count) override;
 private:
     int64_t target_buffer_;
     bool rsft_exceeded_=false;
@@ -90,7 +90,7 @@ private:
 class SvaaAlgorithm:public AdaptationAlgorithm{
 public:
     SvaaAlgorithm(int64_t target_buffer=20000);
-    AlgorithmReply GetNextQuality(PieroDashClient *client,Time now,int pre_quality,int segment_count) override;
+    AlgorithmReply GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count) override;
 private:
     int64_t target_buffer_;
     int m_m_k_1;
