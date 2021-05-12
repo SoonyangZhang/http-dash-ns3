@@ -13,8 +13,6 @@ The throughput and delay of a channel is based on collected trace.
 Nothing is real, and do not take it seriously.
 */
 namespace ns3{
-int count_file_lines(std::string &name);
-void buffer_split(std::string &line,std::vector<std::string>&numbers);
 enum RateTraceType{
     NONE,
     TIME_BW,

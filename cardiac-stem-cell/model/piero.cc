@@ -1,50 +1,13 @@
 #include <limits>
-#include "ns3/log.h"
-#include "piero.h"
 #include <stdio.h>
 #include <vector>
 #include <cctype>
+#include "piero_misc.h"
+#include "ns3/log.h"
+#include "piero.h"
 namespace ns3{
 NS_LOG_COMPONENT_DEFINE("piero");
 const int kPacketSize=1500;
-int count_file_lines(std::string &name){
-    FILE *fp=fopen(name.c_str(), "r");
-    char c;
-    int lines=0;
-    if(!fp){
-        return lines;
-    }
-    for (c = getc(fp); c != EOF; c = getc(fp)){
-        if (c == '\n'){
-            lines = lines + 1;
-        }
-    }
-    fclose(fp);
-    return lines;
-}
-void buffer_split(std::string &line,std::vector<std::string>&numbers){
-    int n=line.size();
-    int start=-1;
-    int stop=-1;
-    for(int i=0;i<n;i++){
-        bool success=isdigit(line[i])||(line[i]=='.');
-        if(start==-1&&success){
-            start=i;
-        }
-        if((start!=-1)&&(!success)){
-            stop=i;
-        }
-        if(i==n-1&&success){
-            stop=i;
-        }
-        if(start>=0&&stop>=start){
-            std::string one=line.substr(start,stop);
-            numbers.push_back(one);
-            start=-1;
-            stop=-1;
-        }
-    }
-}
 PieroUniChannel::~PieroUniChannel(){
     while(!packets_.empty()){
         auto it=packets_.begin();
@@ -203,7 +166,7 @@ void PieroTraceChannel::ReadPacketFromSocket(PieroSocket *socket,PieroPacket *pa
 void PieroTraceChannel::SetBandwidthTrace(DatasetDescriptation &des,Time interval){
     if(bw_trace_.is_open()) {return ;}
     des_=des;
-    lines_=count_file_lines(des.name);
+    lines_=CountFileLines(des.name);
     trace_time_[0]=Time(0);
     trace_time_[1]=interval;
     type_=des.type;
@@ -308,7 +271,7 @@ bool PieroTraceChannel::UpdateBandwidth(uint8_t index){
         getline(bw_trace_,buffer);
         if(RateTraceType::TIME_BW==type_){
             std::vector<std::string> numbers;
-            buffer_split(buffer,numbers);
+            BufferSplit(buffer,numbers);
             if(numbers.size()<2){
                 return ret;
             }

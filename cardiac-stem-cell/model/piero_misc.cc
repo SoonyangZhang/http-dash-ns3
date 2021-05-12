@@ -2,6 +2,9 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h> // stat
+#include <iostream>
+#include <fstream>
+#include <string.h>
 #include "piero_misc.h"
 namespace ns3{
 static bool piero_has_digit(std::string & line){
@@ -138,5 +141,43 @@ inline int64_t WallTimeNowInUsec(){
 }
 int64_t PieroTimeMillis(){
     return WallTimeNowInUsec()/1000;
+}
+int CountFileLines(std::string &name){
+    FILE *fp=fopen(name.c_str(), "r");
+    char c;
+    int lines=0;
+    if(!fp){
+        return lines;
+    }
+    for (c = getc(fp); c != EOF; c = getc(fp)){
+        if (c == '\n'){
+            lines = lines + 1;
+        }
+    }
+    fclose(fp);
+    return lines;
+}
+void BufferSplit(std::string &line,std::vector<std::string>&numbers){
+    int n=line.size();
+    int start=-1;
+    int stop=-1;
+    for(int i=0;i<n;i++){
+        bool success=isdigit(line[i])||(line[i]=='.');
+        if(start==-1&&success){
+            start=i;
+        }
+        if((start!=-1)&&(!success)){
+            stop=i;
+        }
+        if(i==n-1&&success){
+            stop=i;
+        }
+        if(start>=0&&stop>=start){
+            std::string one=line.substr(start,stop);
+            numbers.push_back(one);
+            start=-1;
+            stop=-1;
+        }
+    }
 }
 }

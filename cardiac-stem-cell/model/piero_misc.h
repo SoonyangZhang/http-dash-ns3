@@ -2,7 +2,7 @@
 #include <string>
 #include <deque>
 #include <vector>
-#include "ns3/core-module.h"
+#include "ns3/nstime.h"
 namespace ns3{
 const int kFramesPerSecond=25;
 const int kInitialSegments=3;
@@ -63,4 +63,6 @@ void ReadSegmentFromFile(std::vector<std::string>& video_log,struct VideoData &v
 bool MakePath(const std::string& path);
 void GetFiles(std::string &cate_dir,std::vector<std::string> &files);
 int64_t PieroTimeMillis();
+int CountFileLines(std::string &name);
+void BufferSplit(std::string &line,std::vector<std::string>&numbers);
 }

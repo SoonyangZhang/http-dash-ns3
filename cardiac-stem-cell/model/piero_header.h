@@ -4,7 +4,7 @@
 #include "ns3/header.h"
 #include "ns3/tag.h"
 namespace ns3{
-#define PIEROMSGDEBUG 1
+#define PIERO_HEADER_DBUG 1
 int cal_varint_length(uint64_t number);
 enum PieroUdpMessageType:uint8_t{
     PUM_MIN_TYPE,

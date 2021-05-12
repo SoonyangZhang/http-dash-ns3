@@ -100,7 +100,12 @@ void PieroDashBase::StartApplication(){
     RequestSegment();
 }
 void PieroDashBase::StopApplication(){}
-
+void PieroDashBase::Terminate(){
+    request_timer_.Cancel();
+    player_timer_.Cancel();
+    player_state_=PLAYER_DONE;
+    FireTerminateSignal();
+}
 void PieroDashBase::RequestSegment(){
     Time now=Simulator::Now();
     AlgorithmReply reply=algorithm_->GetNextQuality(this,now,quality_,index_);
@@ -115,7 +120,7 @@ void PieroDashBase::RequestSegment(){
             OnRequestEvent();
         }        
     }else{
-        FireTerminateSignal();
+        Terminate();
     }
 }
 void PieroDashBase::ReceiveOnePacket(int size){
@@ -180,7 +185,7 @@ void PieroDashBase::OnPlayBackEvent(){
     if(segments_in_buffer_==0){
         int segment_num=video_data_.representation[0].size();
         if(playback_index_>=segment_num){
-            FireTerminateSignal();
+            Terminate();
             player_state_=PLAYER_DONE;
         }else{
             player_state_=PLAYER_PAUSED;

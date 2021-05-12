@@ -34,6 +34,7 @@ protected:
     virtual void StopApplication(void);
     virtual void OnRequestEvent()=0;
     virtual void FireTerminateSignal()=0;
+    void Terminate();
     void RequestSegment();
     void ReceiveOnePacket(int size);
     void PostProcessingAfterPacket();

@@ -45,10 +45,7 @@ void PieroDashClient::OnReadEvent(int bytes){
     PostProcessingAfterPacket();
 }
 void PieroDashClient::FireTerminateSignal(){
-    request_timer_.Cancel();
-    player_timer_.Cancel();
     broadcast_.Fire();
-    player_state_=PLAYER_DONE;
 }
 void PieroDashClient::OnRequestEvent(){
     if(video_data_.representation.size()>0){

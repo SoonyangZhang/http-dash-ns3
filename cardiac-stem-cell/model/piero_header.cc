@@ -1,7 +1,7 @@
 #include <string>
 #include <memory.h>
 #include "ns3/log.h"
-#include "piero_udp_message.h"
+#include "piero_header.h"
 namespace ns3{
 static std::string MessageTypeToString(uint8_t type) {
   switch (type) {
