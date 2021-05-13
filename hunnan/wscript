@@ -1,0 +1,24 @@
+def build(bld):
+    module= bld.create_ns3_module('hunnan')
+    module.source = [
+        'model/hunnan_app.cc',
+        'model/hunnan_channel.cc',
+        'model/hunnan_host_list.cc',
+        'model/hunnan_net_device.cc',
+        'model/hunnan_node.cc',
+        'model/hunnan_source_sink.cc',
+        'helper/hunnan_point_to_point_helper.cc',
+    ]
+    headers = bld(features='ns3header')
+    headers.module ='hunnan'
+    headers.source =[
+        'model/hunnan_app.h',
+        'model/hunnan_channel.h',
+        'model/hunnan_net_device.h',
+        'model/hunnan_node.h',
+        'model/hunnan_source_sink.h',
+        'helper/hunnan_point_to_point_helper.h',
+    ]
+    module.env['INCLUDES'] += [
+    'model',
+	]

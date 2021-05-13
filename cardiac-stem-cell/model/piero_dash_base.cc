@@ -217,6 +217,7 @@ void PieroDashBase::CheckBufferStatus(){
 }
 void PieroDashBase::CalculateOneQoE(Time pause_time){
     int n=history_quality_.size();
+    if(0==n) {return ;}
     double qoe=0.0;
     double rebuf=pause_time.GetMilliSeconds()*1.0/1000;
     auto a=video_data_.averageBitrate.at(history_quality_.at(n-1))/kMUnit;
@@ -252,7 +253,7 @@ void PieroDashBase::OpenTrace(std::string &name){
     }
 #if defined (PIERO_LOG_RATE)
     {
-        std::string pathname =path+name+"_bw.txt";
+        std::string pathname =path+name+"_rate.txt";
         f_rate_.open(pathname.c_str(),std::fstream::out);
     }
 #endif
@@ -267,12 +268,12 @@ void PieroDashBase::LogPlayStatus(){
 }
 void PieroDashBase::LogQoEInfo(){
     if(f_reward_.is_open()){
-        int i=1;
-        for(auto it=qoe_rebuf_.begin();it!=qoe_rebuf_.end();it++){
-            double qoe=it->first;
-            double rebuf=it->second;
-            f_reward_<<i<<"\t"<<qoe<<"\t"<<rebuf<<std::endl;
-            i++;
+        int sz=qoe_rebuf_.size();
+        for(int i=0;i<sz;i++){
+            double qoe=qoe_rebuf_[i].first;
+            double rebuf=qoe_rebuf_[i].second;
+            int level=history_quality_.at(i);
+            f_reward_<<i<<"\t"<<qoe<<"\t"<<rebuf<<"\t"<<level<<std::endl;
         }
     }
 }
@@ -293,7 +294,7 @@ void PieroDashBase::LogAverageRate(){
         if(denominator!=Time(0)){
             average_kbps_2=1.0*total_bytes_*8/(denominator.GetMilliSeconds());
         }
-        f_play_<<"\t"<<average_kbps_1<<"\t"<<average_kbps_2<<std::endl;
+        f_play_<<average_kbps_1<<"\t"<<average_kbps_2<<std::endl;
     }
 }
 }

@@ -138,8 +138,7 @@ void UdpClientChannel::RecvPacket(Ptr<Socket> socket){
 }
 void UdpClientChannel::OnHealthEvent(){
     if(!download_done_cb_.IsNull()){
-        NS_LOG_ERROR(LOC<<" packet loss");
-        NS_ASSERT(0);
+        NS_ASSERT_MSG(0,"packet loss");
         download_done_cb_(this,0);    
     }
 }
