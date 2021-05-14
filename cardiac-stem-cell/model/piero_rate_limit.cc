@@ -4,12 +4,14 @@
 #include "piero_header.h"
 #include "piero_udp_chan.h"
 #include "ns3/simulator.h"
+#include "piero_flag.h"
 #include "ns3/log.h"
 namespace ns3{
-const char *piero_rate_limit_name="piero-rate-limit";
+const char *piero_rate_limit_name="piero_rate_limit";
 NS_LOG_COMPONENT_DEFINE(piero_rate_limit_name);
 #define LOC piero_rate_limit_name<<__LINE__<<":"
 const uint32_t kPacketSize=1400;
+const uint64_t kMinRate=50000;//50 kbps;
 PieroRateLimitBase::PieroRateLimitBase(Time start,Time stop,DatasetDescriptation *des,DataRate init_rate){
     start_time_=start;
     stop_time_=stop;
@@ -84,7 +86,7 @@ void PieroRateLimitBase::StartApplication(){
     if(file_lines_>1){
         Time next=trace_time_[1]-trace_time_[0];
         bandwidth_=trace_rate_[0];
-        NS_LOG_INFO(LOC<<"trace rate "<<bandwidth_<<" "<<next.GetMilliSeconds());
+        //NS_LOG_INFO(LOC<<"trace rate "<<bandwidth_<<" "<<next.GetMilliSeconds());
         bandwidth_timer_=Simulator::Schedule(next,&PieroRateLimitBase::OnUpdateBandwidthEvent,this);
     }
 }
@@ -98,7 +100,7 @@ void PieroRateLimitBase::OnPacerEvent(){
             uint32_t pkt_sz=std::min(kPacketSize,request_bytes_-send_bytes_);
             send_bytes_+=pkt_sz;
             Ptr<Packet> p=Create<Packet>(pkt_sz);
-            #if defined (PIERO_HEADER_DBUG)
+            #if (PIERO_HEADER_DBUG)
             uint32_t ms=Simulator::Now().GetMilliSeconds();
             PieroChunkResponce res;
             res.id=chunk_pos_;
@@ -148,7 +150,9 @@ void PieroRateLimitBase::OnUpdateBandwidthEvent(){
             bandwidth_=trace_rate_[0];
             bandwidth_timer_=Simulator::Schedule(next,&PieroRateLimitBase::OnUpdateBandwidthEvent,this);
         }
-        NS_LOG_INFO(LOC<<"trace rate "<<bandwidth_);
+#if (PIERO_MODULE_DEBUG)
+        NS_LOG_INFO(LOC<<"trace rate "<<bandwidth_<<PIERO_MODULE_DEBUG);
+#endif
     }
 }
 void PieroRateLimitBase::ProcessRequestQueue(){
@@ -175,6 +179,9 @@ bool PieroRateLimitBase::ReadBandwidthFromFile(uint32_t index){
             trace_time_[index]=MilliSeconds(ms);
             double bw=std::stod(numbers[1]);
             int64_t bps=rate_unit_*bw;
+            if(bps<kMinRate){
+                bps=kMinRate;
+            }
             trace_rate_[index]=DataRate(bps);
             //NS_LOG_INFO(trace_rate_[index]);
             ret=true;

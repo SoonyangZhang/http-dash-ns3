@@ -1,13 +1,16 @@
 #include "piero_hunnan_chan.h"
+#include "piero_flag.h"
 #include "ns3/simulator.h"
 #include "ns3/log.h"
 namespace ns3{
-const char *piero_hunnan_chan_name="piero-hunnan-chan";
+const char *piero_hunnan_chan_name="piero_hunnan_chan";
 NS_LOG_COMPONENT_DEFINE(piero_hunnan_chan_name);
 #define LOC piero_hunnan_chan_name<<__LINE__<<":"
 HunnanClientChannel::HunnanClientChannel(Time max_processing_delay):mpt_(max_processing_delay){}
 HunnanClientChannel::~HunnanClientChannel(){
+#if (PIERO_MODULE_DEBUG)
     NS_LOG_INFO("HunnanClientChannel dtor"<<this);
+#endif
 }
 bool HunnanClientChannel::RequestChunk(uint32_t id,uint32_t sz){
     if(dowloading_){
@@ -88,15 +91,17 @@ void HunnanClientChannel::Receive(Ptr<Packet> packet){
     }
     if(chunk_size_==chunk_recv_){
         dowloading_=false;
+#if  (PIERO_MODULE_DEBUG)
         if(chunk_end_time_>chunk_start_time_){
             double rate=1.0*chunk_recv_old_*8/(chunk_end_time_-chunk_start_time_).GetSeconds();
             NS_LOG_INFO(LOC<<" rate "<<rate);
         }
+#endif
         health_timer_.Cancel();
         if(!download_done_cb_.IsNull()){
             download_done_cb_(this,chunk_recv_);
         }
-#if defined (PIERO_HEADER_DBUG)
+#if  (PIERO_HEADER_DBUG)
     last_packet_time_=Time(0);
 #endif
     }else{
@@ -118,7 +123,9 @@ void HunnanClientChannel::OnHealthEvent(){
 
 HunnanServerChannel::HunnanServerChannel(){}
 HunnanServerChannel::~HunnanServerChannel(){
+#if (PIERO_MODULE_DEBUG)
     NS_LOG_INFO("HunnanServerChannel dtor"<<this);
+#endif
 }
 void HunnanServerChannel::SetRecvDataStub(Callback<void,Ptr<Packet> > cb){
     recv_data_stub_=cb;

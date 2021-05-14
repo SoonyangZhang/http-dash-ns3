@@ -20,7 +20,7 @@ HunnanNode::HunnanNode(){
     Construct();
 }
 HunnanNode::~HunnanNode(){
-#if defined(HUNNAN_MODULE_DEBUG)
+#if (HUNNAN_MODULE_DEBUG)
     NS_LOG_INFO("HunnanNode dtor"<<this);
 #endif
 }
@@ -61,7 +61,7 @@ void HunnanNode::Receive(Ptr<HunnanNetDevice> dev,Ptr<Packet> packet){
     }
 }
 void HunnanNode::DoDispose (void){
-#if defined(HUNNAN_MODULE_DEBUG)
+#if (HUNNAN_MODULE_DEBUG)
     NS_LOG_INFO(LOC<<"HunnanNode DoDispose");
 #endif
     for(auto i=devices_.begin();i!=devices_.end();i++){

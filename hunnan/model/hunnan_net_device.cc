@@ -25,7 +25,7 @@ TypeId HunnanNetDevice::GetTypeId (void){
 }
 HunnanNetDevice::HunnanNetDevice(){}
 HunnanNetDevice::~HunnanNetDevice(){
-#if defined(HUNNAN_MODULE_DEBUG)
+#if (HUNNAN_MODULE_DEBUG)
     NS_LOG_INFO("HunnanNetDevice dtor"<<this);
 #endif
 }
@@ -44,15 +44,27 @@ bool HunnanNetDevice::Attach(Ptr<HunnanChannel> ch){
 Ptr<HunnanChannel> HunnanNetDevice::GetChannel() const{
     return channel_;
 }
+void HunnanNetDevice::SetPacketDropTrace(Callback<void,Ptr<const Packet> > cb){
+    packet_drop_trace_=cb;
+}
 bool HunnanNetDevice::Send(Ptr<Packet> packet){
     if(!IsLinkUp()){
         NS_ASSERT_MSG(0,"link is not up");
         return false;
     }
     uint32_t sz=packet->GetSize();
+    bool reliable=false;
+#if HUNNAN_DEVICE_NO_DROP
+    reliable=true;
+#endif 
     if(sz+buffered_bytes_>max_buffer_size_){
-        NS_LOG_ERROR(LOC<<"buffer overflow");
-        return false;
+        if(!packet_drop_trace_.IsNull()){
+            packet_drop_trace_(packet);
+        }
+        if(!reliable){
+            NS_LOG_ERROR(LOC<<"buffer overflow and drop");
+            return false;
+        }
     }
     buffered_bytes_+=sz;
     buffer_.push_back(packet);
@@ -70,11 +82,12 @@ void HunnanNetDevice::Receive(Ptr<Packet> packet){
     node_->Receive(this,packet);
 }
 void HunnanNetDevice::DoDispose (void){
-#if defined(HUNNAN_MODULE_DEBUG)
+#if (HUNNAN_MODULE_DEBUG)
     NS_LOG_INFO(LOC<<"HunnanNetDevice DoDispose");
 #endif
     node_=0;
     channel_=0;
+    packet_drop_trace_=MakeNullCallback<void, Ptr<const Packet> >();
     Object::DoDispose();
 }
 void HunnanNetDevice::DoInitialize (void){
@@ -96,6 +109,16 @@ void HunnanNetDevice::TransmitComplete(void){
         buffered_bytes_-=p->GetSize();
         TransmitStart(p);
     }
+}
+Ptr<HunnanNetDevice> HunnanNetDeviceContainer::Get(uint32_t index) const{
+    NS_ASSERT_MSG(index<devices_.size(),"out of range");
+    return devices_[index];
+}
+void HunnanNetDeviceContainer::Add(Ptr<HunnanNetDevice> dev){
+    devices_.push_back(dev);
+}
+uint32_t HunnanNetDeviceContainer::GetN() const{
+    return devices_.size();
 }
 
 }

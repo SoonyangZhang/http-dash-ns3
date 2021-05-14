@@ -20,12 +20,17 @@ A_DIM = 6
 ACTOR_LR_RATE =1e-4
 MODEL_SAVE_INTERVAL =100
 PRINT_LOG_INTERVAL=100
-TRAIN_RECORD_DIR="train_record/"
 MODEL_DIR="model_data/"
+NN_INFO_STORE_DIR="nn_info/"
 PRETRAIN_MODEL_DIR="pretrain_dir/"
-NS3_PATH="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/build/scratch/"
-TRAIN_BW_FOLDER="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_traces/"
-TEST_BW_FOLDER="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/bw_data/cooked_test_traces/"
+LOAD_MODEL_DIR="load_model/" #for test agent
+NS3_PATH="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/"
+NS3_EXE_PATH=NS3_PATH+"build/scratch/"
+EXE_TRAIN_TEMPLATE="piero-rl-train --it=%s --gr=%s --ag=%s --bwid=%s"
+EXE_TEST_TEMPLATE="piero-rl-train --it=%s --log=1 --gr=%s --ag=%s --bwid=%s"
+EXE_TEMPLATE=EXE_TRAIN_TEMPLATE
+TRAIN_BW_FOLDER=NS3_PATH+"bw_data/cooked_traces/"
+TEST_BW_FOLDER=NS3_PATH+"bw_data/cooked_test_traces/"
 VIDEO_BIT_RATE = [300.0,750.0,1200.0,1850.0,2850.0,4300.0]  # Kbps
 DEFAULT_QUALITY=1
 CHUNK_TIL_VIDEO_END_CAP =50.0
@@ -42,6 +47,25 @@ def TimeMillis():
 def TimeMillis32():
     now=TimeMillis()&0xffffffff
     return now
+def set_nn_info_store_dir(pathname):
+    global NN_INFO_STORE_DIR
+    temp=pathname
+    sz=len(pathname)
+    if '/'!=pathname[sz-1]:
+        temp=pathname+"/"
+    NN_INFO_STORE_DIR=temp
+def set_exe_test_template():
+    global EXE_TEST_TEMPLATE
+    global EXE_TEMPLATE
+    EXE_TEMPLATE=EXE_TEST_TEMPLATE
+# the folder of bandwidth trace
+def set_train_bw_foler(folder):
+    global TRAIN_BW_FOLDER
+    TRAIN_BW_FOLDER=folder
+def set_test_bw_foler(folder):
+    global TEST_BW_FOLDER
+    TEST_BW_FOLDER=folder
+
 class StateBatch:
     def __init__(self,agent_id,s_batch, a_batch, p_batch, v_batch):
         self.agent_id=agent_id
@@ -127,9 +151,9 @@ class CentralAgent(mp.Process):
         num_test_traces=fp.count_files(TEST_BW_FOLDER)
         self.train_trace_id_list=[i for i in range(num_train_traces)]
         self.test_trace_id_list=[i for i in range(num_test_traces)]
-        fp.mkdir(MODEL_DIR)
-        fp.mkdir(TRAIN_RECORD_DIR)
-        pathname=TRAIN_RECORD_DIR+str(TimeMillis32())+"_reward_and_entropy.txt"
+        fp.mkdir(NN_INFO_STORE_DIR)
+        fp.mkdir(NN_INFO_STORE_DIR+MODEL_DIR)
+        pathname=NN_INFO_STORE_DIR+str(TimeMillis32())+"_reward_and_entropy.txt"
         self.fp_re=open(pathname,"w")
         self._init_tensorflow()
         self.saver= tf.train.Saver(max_to_keep=2*MODEL_RECORD_WINDOW)
@@ -160,7 +184,7 @@ class CentralAgent(mp.Process):
             self.control_msg_pipes[i][0].close()
         if self.terminate:
             self.logger.debug("terminate signal")
-        pathname=MODEL_DIR+"model_info.txt"
+        pathname=NN_INFO_STORE_DIR+MODEL_DIR+"model_info.txt"
         model_info_file=open(pathname,"w")
         for i in range(len(self.model_info_heap)):
             info=self.model_info_heap[i]
@@ -275,15 +299,151 @@ class CentralAgent(mp.Process):
         for i in range(len(self.control_msg_pipes)):
             self.control_msg_pipes[i][0].send((AGENT_MSG_STOP,'deadbeaf'))
     def _save_model(self,info):
-        new_dir=MODEL_DIR+str(info.epoch)+"/"
+        new_dir=NN_INFO_STORE_DIR+MODEL_DIR+str(info.epoch)+"/"
         fp.mkdir(new_dir)
         pathname=new_dir+"nn_model.ckpt"
         self.saver.save(self.sess,pathname)
         heapq.heappush(self.model_info_heap,info)
         if len(self.model_info_heap)>MODEL_RECORD_WINDOW:
             old_info=heapq.heappop(self.model_info_heap)
-            old_dir=MODEL_DIR+str(old_info.epoch)+"/"
+            old_dir=NN_INFO_STORE_DIR+MODEL_DIR+str(old_info.epoch)+"/"
             fp.remove_dir(old_dir)
+class CentralTestAgent(mp.Process):
+    def __init__(self,num_agent,id_span,control_msg_pipes):
+        self.num_agent=num_agent
+        self.id_span=id_span
+        self.control_msg_pipes=control_msg_pipes
+        self.s_dim=S_DIM
+        self.a_dim=A_DIM
+        self.lr_rate = ACTOR_LR_RATE
+        self.epoch=0
+        self.sess=None
+        self.actor=None
+        self.terminate=False
+        self.done=False
+        self.reward_entropy_list=[]
+        self.test_trace_id_list=[]
+        self.test_trace_index=0
+        self.test_expect_count=0
+        self.can_send_test_args=True
+        self.fp_re=None
+        self.logger = logging.getLogger("rl")
+        mp.Process.__init__(self)
+    def handle_signal(self, signum, frame):
+        self.terminate= True
+    def stop_process(self):
+        self.terminate= True
+    def _init_tensorflow(self):
+        os.environ["CUDA_VISIBLE_DEVICES"]="0"
+        tf.disable_v2_behavior()
+        #config = ConfigProto()
+        #config.gpu_options.allow_growth = True
+        #self.sess=tf.Session(config=config)
+        self.sess = tf.Session()
+        scope="central"
+        self.actor=network.Network(self.s_dim,self.a_dim,self.lr_rate,scope)
+        init = tf.global_variables_initializer() 
+        self.sess.run(init)
+    def run(self):
+        signal.signal(signal.SIGINT,self.handle_signal)
+        signal.signal(signal.SIGTERM,self.handle_signal)
+        signal.signal(signal.SIGHUP, self.handle_signal) 
+        signal.signal(signal.SIGTSTP,self.handle_signal)
+        for i in range(len(self.control_msg_pipes)):
+            self.control_msg_pipes[i][1].close()
+        num_test_traces=fp.count_files(TEST_BW_FOLDER)
+        self.test_trace_id_list=[i for i in range(num_test_traces)]
+        fp.mkdir(NN_INFO_STORE_DIR+MODEL_DIR)
+        self._init_tensorflow()
+        saver= tf.train.Saver()
+        recovered=False
+        if os.path.exists(LOAD_MODEL_DIR):
+            name="nn_model.ckpt"
+            model_recover=LOAD_MODEL_DIR+name
+            if fp.check_filename_contain(LOAD_MODEL_DIR,name):
+                self.logger.debug("model recover")
+                saver.restore(self.sess,model_recover)
+                recovered=True;
+            else:
+                self.logger.debug("no model")
+        if recovered is False:
+            self._stop_agents()
+            return
+        pathname=NN_INFO_STORE_DIR+str(TimeMillis32())+"_test_reward_and_entropy.txt"
+        self.fp_re=open(pathname,"w")
+        self._write_net_param()
+        while not self.terminate:
+            self._check_control_msg_pipe()
+            self._process_test_mode()
+            if self.done:
+                self._stop_agents()
+                break
+        self.sess.close()
+        self.fp_re.close()
+        for i in range(len(self.control_msg_pipes)):
+            self.control_msg_pipes[i][0].close()
+        if self.terminate:
+            self.logger.debug("terminate signal")
+    def _process_test_mode(self):
+        if self.test_expect_count>0 and len(self.reward_entropy_list)==self.test_expect_count:
+            sz=len(self.test_trace_id_list)
+            if len(self.reward_entropy_list)==sz:
+                self._reward_entropy_mean()
+                self.can_send_test_args=False
+                self.done=True
+            else:
+                self.can_send_test_args=True
+        if self.can_send_test_args:
+            self._send_test_args()
+    def _reward_entropy_mean(self):
+        sz=len(self.reward_entropy_list)
+        rewards=[]
+        entropys=[]
+        for i in range(sz):
+            rewards.append(self.reward_entropy_list[i].reward)
+            entropys.append(self.reward_entropy_list[i].entropy)
+        average_reward=np.mean(rewards)
+        average_entropy=np.mean(entropys)
+        out=str(self.epoch)+"\t"+str(average_reward)+"\t"+str(average_entropy)+"\n"
+        self.fp_re.write(out)
+    def _check_control_msg_pipe(self):
+        for i in range(len(self.control_msg_pipes)):
+            if self.control_msg_pipes[i][0].poll(0):
+                msg=None
+                try:
+                    type,msg=self.control_msg_pipes[i][0].recv()
+                except EOFError:
+                    self.logger.debug("error when read {}".format(i+1))
+                if msg and type==AGENT_MSG_STATEBATCH:
+                    self._stop_agents()
+                    assert 0,"shoule not genetate state msg"
+                if msg and type==AGENT_MSG_REWARDENTROPY:
+                    self.reward_entropy_list.append(msg)
+    def _write_net_param(self):
+        params=self.actor.get_network_params(self.sess)
+        actor_param=ActorParameter(params)
+        for i in range(len(self.control_msg_pipes)):
+            self.control_msg_pipes[i][0].send((AGENT_MSG_NETPARAM,actor_param))
+    def _send_test_args(self):
+        group_id=2233
+        sz=len(self.test_trace_id_list)
+        tasks=min(self.num_agent,sz-self.test_expect_count)
+        self.test_expect_count+=tasks
+        i=0
+        while tasks>0:
+            l=[]
+            n=min(tasks,self.id_span)
+            for j in range(n):
+                l.append(self.test_trace_id_list[self.test_trace_index+j])
+            args=Ns3Args(False,group_id,l)
+            self.control_msg_pipes[i][0].send((AGENT_MSG_NS3ARGS,args))
+            tasks=tasks-n
+            self.test_trace_index+=n
+            i+=1
+        self.can_send_test_args=False
+    def _stop_agents(self):
+        for i in range(len(self.control_msg_pipes)):
+            self.control_msg_pipes[i][0].send((AGENT_MSG_STOP,'deadbeaf'))
 class Agent(object):
     def __init__(self,context,agent_id):
         self.context=context
@@ -406,11 +566,11 @@ class Agent(object):
         self.train_or_test=train_or_test
         self.group_id=group_id
         self.trace_id=trace_id
-        exe_cmd=NS3_PATH+"piero-test --rl=true --tr=%s --gr=%s --ag=%s --bwid=%s"
+        exe_cmd=NS3_EXE_PATH+EXE_TEMPLATE
         if train_or_test:
-            cmd=exe_cmd%("true",str(group_id),str(self.agent_id),str(trace_id))
+            cmd=exe_cmd%(str(1),str(group_id),str(self.agent_id),str(trace_id))
         else:
-            cmd=exe_cmd%("false",str(group_id),str(self.agent_id),str(trace_id))
+            cmd=exe_cmd%(str(2),str(group_id),str(self.agent_id),str(trace_id))
         self.ns3=subprocess.Popen(cmd,shell =True)
     def reset_state(self):
         self.state = np.zeros((self.s_dim[0], self.s_dim[1]),dtype=np.float32)

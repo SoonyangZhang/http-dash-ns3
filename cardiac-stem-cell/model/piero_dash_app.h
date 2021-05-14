@@ -50,8 +50,10 @@ public:
     ~DashHunnanSink();
     void RegisterChannel(Ptr<HunnanServerChannel> ch);
     void ReceivePacket(Ptr<Packet> packet);
+    void PacketDropTrace(Ptr<const Packet> packet);
 private:
     void SendToNetwork(Ptr<Packet> packet) override;
     Ptr<HunnanServerChannel> channel_;
+    std::string  dataset_name_;
 };
 }

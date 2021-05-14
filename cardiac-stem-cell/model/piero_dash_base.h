@@ -52,6 +52,7 @@ protected:
     struct VideoData video_data_;
     ThroughputData throughput_;
     BufferData buffer_data_;
+    std::string algo_name_;
     std::unique_ptr<AdaptationAlgorithm> algorithm_;
     std::deque<int> history_quality_;
     std::deque<std::pair<double,double>> qoe_rebuf_;

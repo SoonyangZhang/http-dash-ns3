@@ -23,7 +23,7 @@ void HunnanSourceApp::Receive(Ptr<Packet> packet){
     NS_LOG_INFO(ms<<" source "<<packet->GetSize());
 }
 HunnanSinkApp::~HunnanSinkApp(){
-#if defined(HUNNAN_MODULE_DEBUG)
+#if (HUNNAN_MODULE_DEBUG)
     NS_LOG_INFO("HunnanSinkApp dtor"<<this);
 #endif
 }

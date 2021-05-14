@@ -212,7 +212,6 @@ AlgorithmReply PandaAlgorithm::GetNextQuality(PieroDashBase *client,Time now,int
 
     double seconds=(video_data.averageBitrate.at(videoIndex)/1e6)*(1.0*video_data.segmentDuration/1000)/smoothBandwidthShare;
     double targetInterrequestTime = std::max (0.0, (seconds+ m_beta * (m_lastBuffer - m_bMin)));
-    
     Time delay=Time(0);
     if (throughput.transmissionEnd.back () - throughput.transmissionRequested.back () < m_lastTargetInterrequestTime)
     {

@@ -1,9 +1,13 @@
 #include <unistd.h>
-#include "ns3/simulator.h"
 #include "piero_dash_base.h"
 #include "piero_dash_algo.h"
 #include "piero_rl_algo.h"
+#include "ns3/simulator.h"
+#include "ns3/log.h"
 namespace ns3{
+const char *piero_dash_base_name="piero_dash_base";
+NS_LOG_COMPONENT_DEFINE(piero_dash_base_name);
+#define LOC piero_dash_base_name<<__LINE__<<":"
 char root_folder[FILENAME_MAX]={0};
 void piero_set_trace_root_folder(const char *name){
     int i=0;
@@ -47,6 +51,7 @@ PieroDashBase::~PieroDashBase(){
 #endif
 }
 void PieroDashBase::SetAdaptationAlgorithm(std::string &algo,std::string & group_id,std::string &agent_id){
+    algo_name_=algo;
     if(algo.compare("panda")==0){
         algorithm_.reset(new PandaAlgorithm());
     }else if(algo.compare("tobasco")==0){
@@ -115,7 +120,18 @@ void PieroDashBase::RequestSegment(){
     segment_bytes_=video_data_.representation[quality_][index_];
     if(!reply.terminate){
         if(reply.nextDownloadDelay!=Time(0)){
-            request_timer_=Simulator::Schedule(reply.nextDownloadDelay,&PieroDashBase::OnRequestEvent,this);    
+        //handle for unreasonable delay
+        int buffed_ms=get_buffer_level_ms();
+        if(reply.nextDownloadDelay.GetMilliSeconds()>buffed_ms){
+            Time adjust=Time(0);
+            if(buffed_ms>video_data_.segmentDuration){
+                int drain_slot=floor(1.0*(buffed_ms-video_data_.segmentDuration)/video_data_.segmentDuration); 
+                adjust=MilliSeconds(drain_slot*video_data_.segmentDuration);
+            }
+            NS_LOG_INFO(LOC<<reply.nextDownloadDelay.GetMilliSeconds()<<algo_name_<<adjust.GetMilliSeconds()<<" "<<buffed_ms);
+            reply.nextDownloadDelay=adjust;           
+        }
+        request_timer_=Simulator::Schedule(reply.nextDownloadDelay,&PieroDashBase::OnRequestEvent,this);
         }else{
             OnRequestEvent();
         }        
@@ -182,6 +198,7 @@ void PieroDashBase::OnPlayBackEvent(){
             LogPlayStatus();
         }
     }
+    NS_ASSERT(segments_in_buffer_>=0);
     if(segments_in_buffer_==0){
         int segment_num=video_data_.representation[0].size();
         if(playback_index_>=segment_num){

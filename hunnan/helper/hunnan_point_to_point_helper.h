@@ -5,6 +5,7 @@
 namespace ns3{
 class HunnanNode;
 class HunnanNetDevice;
+class HunnanNetDeviceContainer;
 class HunnanChannel;
 class HunnanPointToPointHelper{
 public:
@@ -12,7 +13,7 @@ public:
     ~HunnanPointToPointHelper();
     void SetDeviceAttribute(std::string n1, const AttributeValue &v1);
     void SetChannelAttribute(std::string n1, const AttributeValue &v1);
-    void Install(Ptr<HunnanNode> a,Ptr<HunnanNode> b);
+    HunnanNetDeviceContainer Install(Ptr<HunnanNode> a,Ptr<HunnanNode> b);
 private:
     ObjectFactory device_factory_;
     ObjectFactory channel_factory_;

@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <math.h>
 #include <errno.h>   // for errno and strerror_r
 #include <unistd.h>
 #include <netdb.h>
@@ -164,6 +165,11 @@ bool ReinforceAlgorithm::SendRequestMessage(PieroDashBase *client,AlgorithmReply
         }
     }
     request_id_++;
+    if(buffer_ms>kBufferThresh){
+        float ratio=(1.0*buffer_ms-kBufferThresh)/kDrainBufferSleepTime;
+        int ms=ceil(ratio)*kDrainBufferSleepTime;
+        reply.nextDownloadDelay=MilliSeconds(ms);
+    }
     if(last){
         CloseFd();
     }

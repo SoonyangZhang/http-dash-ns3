@@ -14,7 +14,8 @@ void HunnanPointToPointHelper::SetDeviceAttribute(std::string n1, const Attribut
 void HunnanPointToPointHelper::SetChannelAttribute(std::string n1, const AttributeValue &v1){
     channel_factory_.Set(n1,v1);
 }
-void HunnanPointToPointHelper::Install(Ptr<HunnanNode> a,Ptr<HunnanNode> b){
+HunnanNetDeviceContainer HunnanPointToPointHelper::Install(Ptr<HunnanNode> a,Ptr<HunnanNode> b){
+    HunnanNetDeviceContainer container;
     Ptr<HunnanChannel> channel=channel_factory_.Create<HunnanChannel>();
     Ptr<HunnanNetDevice> devA=device_factory_.Create<HunnanNetDevice>();
     Ptr<HunnanNetDevice> devB=device_factory_.Create<HunnanNetDevice>();
@@ -22,5 +23,8 @@ void HunnanPointToPointHelper::Install(Ptr<HunnanNode> a,Ptr<HunnanNode> b){
     b->AddDevice(devB);
     devA->Attach(channel);
     devB->Attach(channel);
+    container.Add(devA);
+    container.Add(devB);
+    return container;
 }
 }

@@ -3,8 +3,9 @@
 #include "piero_udp_chan.h"
 #include "piero_hunnan_chan.h"
 #include "piero_dash_app.h"
+#include "piero_flag.h"
 namespace ns3{
-const char *piero_dash_app_name="piero-dash-app";
+const char *piero_dash_app_name="piero_dash_app";
 NS_LOG_COMPONENT_DEFINE(piero_dash_app_name);
 DashUdpSource::DashUdpSource(std::vector<std::string> &video_log,std::vector<double> &average_rate,
                     std::string &trace_name,int segment_ms,int init_segments,
@@ -12,7 +13,9 @@ DashUdpSource::DashUdpSource(std::vector<std::string> &video_log,std::vector<dou
 :PieroDashBase(video_log,average_rate,trace_name,segment_ms,init_segments,
                 start,stop){}
 DashUdpSource::~DashUdpSource(){
+#if (PIERO_MODULE_DEBUG)
     NS_LOG_INFO("DashUdpSource dtor"<<this);
+#endif
 }
 bool DashUdpSource::RegisterChannel(Ptr<UdpClientChannel> channel){
     bool found=false;
@@ -34,7 +37,7 @@ void DashUdpSource::RecvPacket(Ptr<UdpClientChannel> channel,int size){
     ReceiveOnePacket(size);
 }
 void DashUdpSource::DownloadDone(Ptr<UdpClientChannel> channel,int size){
-#if defined (PIERO_LOG_RATE)
+#if  (PIERO_LOG_RATE)
     LogChannelRate(channel);
 #endif
     PostProcessingAfterPacket();
@@ -59,7 +62,7 @@ void DashUdpSource::FireTerminateSignal(){
     }
 }
 void DashUdpSource::LogChannelRate(Ptr<UdpClientChannel> channel){
-#if defined (PIERO_LOG_RATE)
+#if  (PIERO_LOG_RATE)
     if(f_rate_.is_open()){
         uintptr_t ptr=(uintptr_t)PeekPointer(channel);
         uint32_t bytes=0;
@@ -76,7 +79,9 @@ void DashUdpSource::LogChannelRate(Ptr<UdpClientChannel> channel){
 DashUdpSink::DashUdpSink(Time start,Time stop,DatasetDescriptation *des,DataRate init_rate):
 PieroRateLimitBase(start,stop,des,init_rate){}
 DashUdpSink::~DashUdpSink(){
+#if (PIERO_MODULE_DEBUG)
     NS_LOG_INFO("DashUdpSink dtor"<<this);
+#endif
 }
 void DashUdpSink::RegisterChannel(Ptr<UdpServerChannel> ch){
     channel_=ch;
@@ -97,7 +102,9 @@ DashHunnanSource::DashHunnanSource(std::vector<std::string> &video_log,std::vect
 :PieroDashBase(video_log,average_rate,trace_name,segment_ms,init_segments,
                 start,stop){}
 DashHunnanSource::~DashHunnanSource(){
+#if (PIERO_MODULE_DEBUG)
     NS_LOG_INFO("DashHunnanSource dtor"<<this);
+#endif
 }
 bool DashHunnanSource::RegisterChannel(Ptr<HunnanClientChannel> channel){
     bool found=false;
@@ -119,7 +126,7 @@ void DashHunnanSource::RecvPacket(Ptr<HunnanClientChannel> channel,int size){
     ReceiveOnePacket(size);
 }
 void DashHunnanSource::DownloadDone(Ptr<HunnanClientChannel> channel,int size){
-#if defined (PIERO_LOG_RATE)
+#if  (PIERO_LOG_RATE)
     LogChannelRate(channel);
 #endif
     PostProcessingAfterPacket();
@@ -144,7 +151,7 @@ void DashHunnanSource::FireTerminateSignal(){
     }
 }
 void DashHunnanSource::LogChannelRate(Ptr<HunnanClientChannel> channel){
-#if defined (PIERO_LOG_RATE)
+#if  (PIERO_LOG_RATE)
     if(f_rate_.is_open()){
         uintptr_t ptr=(uintptr_t)PeekPointer(channel);
         uint32_t bytes=0;
@@ -159,15 +166,27 @@ void DashHunnanSource::LogChannelRate(Ptr<HunnanClientChannel> channel){
 #endif
 }
 DashHunnanSink::DashHunnanSink(Time start,Time stop,DatasetDescriptation *des,DataRate init_rate):
-PieroRateLimitBase(start,stop,des,init_rate){}
+PieroRateLimitBase(start,stop,des,init_rate){
+    if(des){
+        dataset_name_=des->name;
+    }
+}
 DashHunnanSink::~DashHunnanSink(){
+#if (PIERO_MODULE_DEBUG)
     NS_LOG_INFO("DashHunnanSink dtor"<<this);
+#endif
 }
 void DashHunnanSink::RegisterChannel(Ptr<HunnanServerChannel> ch){
     channel_=ch;
     if(channel_){
         channel_->SetRecvDataStub(MakeCallback(&DashHunnanSink::ReceivePacket,this));
     }
+    channel_->GetNode()->GetDevice(0)->SetPacketDropTrace(
+        MakeCallback(&DashHunnanSink::PacketDropTrace,this)
+    );
+}
+void DashHunnanSink::PacketDropTrace(Ptr<const Packet> packet){
+    NS_ASSERT_MSG(0,"drop packet "<<dataset_name_<<bandwidth_);
 }
 void DashHunnanSink::ReceivePacket(Ptr<Packet> packet){
     OnIncomingPacket(packet);

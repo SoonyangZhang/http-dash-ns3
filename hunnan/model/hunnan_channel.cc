@@ -19,7 +19,7 @@ TypeId HunnanChannel::GetTypeId (void){
 }
 HunnanChannel::HunnanChannel(){}
 HunnanChannel::~HunnanChannel(){
-#if defined(HUNNAN_MODULE_DEBUG)
+#if (HUNNAN_MODULE_DEBUG)
     NS_LOG_INFO("HunnanChannel dtor"<<this);
 #endif
 }
@@ -44,12 +44,12 @@ bool HunnanChannel::TransmitStart(Ptr<Packet> p,Ptr<HunnanNetDevice> src,Time tx
 }
 void HunnanChannel::DoDispose (void){
     Object::DoDispose();
-#if defined(HUNNAN_MODULE_DEBUG)
+#if (HUNNAN_MODULE_DEBUG)
     NS_LOG_INFO(LOC<<"HunnanNetDevice DoDispose");
 #endif
 }
 void HunnanChannel::DoInitialize (void){
-#if defined(HUNNAN_MODULE_DEBUG)
+#if (HUNNAN_MODULE_DEBUG)
     NS_LOG_INFO(LOC<<"HunnanNetDevice DoInitialize");
 #endif
     Object::DoInitialize();

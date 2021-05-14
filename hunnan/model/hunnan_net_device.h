@@ -1,5 +1,6 @@
 #pragma once
 #include <deque>
+#include <vector>
 #include "ns3/core-module.h"
 #include "ns3/data-rate.h"
 #include "ns3/packet.h"
@@ -26,6 +27,7 @@ public:
     void SetBufferSize(uint64_t size) {max_buffer_size_=size;}
     uint64_t GetBufferSize() const {return max_buffer_size_;}
     bool IsLinkUp (void) const {return link_up_;}
+    void SetPacketDropTrace(Callback<void,Ptr<const Packet> > cb);
 protected:
     virtual void DoDispose (void);
     virtual void DoInitialize (void);
@@ -40,5 +42,16 @@ private:
     DataRate bps_;
     TxState tx_state_=READY;
     bool link_up_=false;
+    Callback<void,Ptr<const Packet> > packet_drop_trace_;
+};
+class HunnanNetDeviceContainer{
+public:
+    HunnanNetDeviceContainer(){}
+    ~HunnanNetDeviceContainer(){}
+    Ptr<HunnanNetDevice> Get(uint32_t index) const;
+    void Add(Ptr<HunnanNetDevice> dev);
+    uint32_t GetN() const;
+private:
+    std::vector<Ptr<HunnanNetDevice>> devices_;
 };
 }

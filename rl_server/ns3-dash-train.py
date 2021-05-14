@@ -12,6 +12,7 @@ import file_op as fp
 import time
 import math
 import logging
+import argparse
 class TcpPeer(object):
     def __init__(self,server,conn):
         self.server=server
@@ -184,7 +185,7 @@ Terminate=False
 def signal_handler(signum, frame):
     global Terminate
     Terminate =True
-def multi_thread(num_agent,id_span,left,right):
+def multi_thread_train(num_agent,id_span,left,right):
     state_pipes=[]
     control_msg_pipes=[]
     managers=[]
@@ -220,21 +221,69 @@ def multi_thread(num_agent,id_span,left,right):
     for i in range(num_manager):
         managers[i].stop_process()
         managers[i].join()
+def multi_thread_test(num_agent,id_span):
+    ra.set_exe_test_template()
+    state_pipes=[]
+    control_msg_pipes=[]
+    managers=[]
+    num_manager=math.ceil(num_agent/id_span)
+    for i in range(num_manager):
+        first_id=i*id_span
+        last_id=min((i+1)*id_span,num_agent)
+        conn1,conn2=mp.Pipe()
+        conn3,conn4=mp.Pipe()
+        state_pipes.append((conn1,conn2))
+        control_msg_pipes.append((conn3,conn4))
+        manager=ra.AgentManager(first_id,last_id,state_pipes[i],control_msg_pipes[i])
+        managers.append(manager)
+        manager.start()
+    tcp_server=TcpServer("localhost",1234,state_pipes,id_span)
+    coordinator=ra.CentralTestAgent(num_agent,id_span,control_msg_pipes)
+    coordinator.start()
+    for i in range(len(state_pipes)):
+        state_pipes[i][1].close()
+    while not Terminate:
+        tcp_server.loop_once()
+        active=0;
+        for i in range(num_manager):
+            if managers[i].is_alive():
+                active+=1
+        if coordinator.is_alive():
+            active+=1
+        if active==0:
+            break
+    tcp_server.shutdown()
+    coordinator.stop_process()
+    coordinator.join()
+    for i in range(num_manager):
+        managers[i].stop_process()
+        managers[i].join()
 def start_train():
     NUM_AGENTS=8
     id_span=4
     TRAIN_EPOCH =200000
-    fp.remove_dir(ra.MODEL_DIR)
-    fp.remove_dir(ra.TRAIN_RECORD_DIR)
-    multi_thread(NUM_AGENTS,id_span,0,TRAIN_EPOCH)
+    fp.remove_dir(ra.NN_INFO_STORE_DIR)
+    multi_thread_train(NUM_AGENTS,id_span,0,TRAIN_EPOCH)
+def start_test():
+    NUM_AGENTS=8
+    id_span=4
+    multi_thread_test(NUM_AGENTS,id_span)
+#python ns3-dash-train.py --mode train
 if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGHUP, signal_handler) # ctrl+c
     signal.signal(signal.SIGTSTP, signal_handler) #ctrl+z
+    parser = argparse.ArgumentParser(description='manual to this script')
+    parser.add_argument('--mode', type=str,default ='test')
+    args = parser.parse_args()
+    mode=args.mode
     logging.basicConfig(format='[%(filename)s:%(lineno)d] %(message)s')
     logging.getLogger("rl").setLevel(logging.DEBUG)
     last= time.time()
-    start_train()
+    if mode=="train":
+        start_train()
+    elif mode=="test":
+        start_test();
     delta=time.time()-last
     print("stop: "+str(int(round(delta* 1000))))

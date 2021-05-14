@@ -6,7 +6,7 @@
 #include "piero_udp_chan.h"
 #include "ns3/log.h"
 namespace ns3{
-const char *piero_udp_chan_name="piero-udp-chan";
+const char *piero_udp_chan_name="piero_udp_chan";
 NS_LOG_COMPONENT_DEFINE(piero_udp_chan_name);
 #define LOC piero_udp_chan_name<<__LINE__<<":"
 UdpClientChannel::UdpClientChannel(Time max_processing_delay):mpt_(max_processing_delay){}

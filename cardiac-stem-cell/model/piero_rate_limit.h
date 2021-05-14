@@ -19,6 +19,8 @@ protected:
     void OnIncomingPacket(Ptr<Packet> packet);
     void StartApplication();
     void StopApplication();
+    
+    DataRate bandwidth_;
 private:
     void OnPacerEvent();
     void OnUpdateBandwidthEvent();
@@ -34,7 +36,6 @@ private:
     Ptr<UniformRandomVariable> random_;
     uint32_t file_lines_=0;
     std::fstream bw_trace_;
-    DataRate bandwidth_;
     int64_t time_unit_=1;
     int64_t rate_unit_=1;
     Time trace_time_[2];

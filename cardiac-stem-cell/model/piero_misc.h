@@ -12,6 +12,8 @@ const int kFestiveHorizon=5;
 const double kRebufPenality=4.3;
 static int kDefaultQuality=1;
 const float kMUnit=1000000;
+const float kBufferThresh=60*1000; //60 seconds;
+const float kDrainBufferSleepTime=500; //milliseconds
 enum DashPlayerState{
     PLAYER_NOT_STARTED,
     PLAYER_INIT_BUFFERING,
