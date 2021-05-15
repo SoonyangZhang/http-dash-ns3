@@ -11,6 +11,20 @@ def get_files_name(folder):
             for each in files:
                 list.append(each)
     return list
+def count_files_name_contain(pathname,child):
+    count=0
+    file_names=get_files_name(pathname)
+    for i in range(len(file_names)):
+        if child in file_names[i]:
+            count=count+1
+    return count
+def get_files_name_contain(pathname,child):
+    list=[]
+    file_names=get_files_name(pathname)
+    for i in range(len(file_names)):
+        if child in file_names[i]:
+            list.append(file_names[i])
+    return list
 def ReadRewardInfo(fileName,column):
     r=[]
     line=""
@@ -21,7 +35,7 @@ def ReadRewardInfo(fileName,column):
             continue
         r.append(float(lineArr[column]))
     return r
-def stat_out(f,epoch,rewards):
+def stat_out(f,index,rewards):
     l=len(rewards)
     rewards_min = np.min(rewards)
     rewards_5per = np.percentile(rewards, 5)
@@ -30,51 +44,60 @@ def stat_out(f,epoch,rewards):
     rewards_95per = np.percentile(rewards, 95)
     rewards_max = np.max(rewards)
     d="\t"
-    out=str(epoch)+d+str(l)+d+str(rewards_min)+d+\
+    out=str(index)+d+str(l)+d+str(rewards_min)+d+\
         str(rewards_5per)+d+str(rewards_mean)+d+\
         str(rewards_median)+d+str(rewards_95per)+d+\
         str(rewards_max)+"\n"
     f.write(out)
     f.flush()
-def pro_tradition(data_folder,result_dir):
-    root_path="/home/zsy/ns-allinone-3.31/ns-3.31/traces/"
+def pro_model(data_folder,result_dir):
     algos=["festive","panda","tobasco","osmp","raahs","fdash","sftm","svaa"]
-    all_n=int(len(get_files_name(root_path+data_folder))/(2*len(algos)))
-    mkdir(root_path+result_dir)
+    samples=count_files_name_contain(data_folder,"festive_r.txt")
+    mkdir(result_dir)
     group_id=0
     agent_id=0
     bid=0
     for i in range(len(algos)):
-        dst=root_path+result_dir+algos[i]+".txt"
+        dst=result_dir+algos[i]+".txt"
         f=open(dst,"w")
-        for j in range(all_n):
-            name="%s_%s_%s_%s_r.txt"%(str(group_id),str(agent_id),str(j),algos[i])
-            origin=root_path+data_folder+name
+        child_str=algos[i]+"_r.txt"
+        soruce_files=get_files_name_contain(data_folder,child_str)
+        samples=len(soruce_files)
+        for j in range(samples):
+            name=soruce_files[j]
+            origin=data_folder+name
             r=ReadRewardInfo(origin,1)
             r_copy=[]
-            for k in range(1,len(r)-1):
+            for k in range(0,len(r)):
                 r_copy.append(r[k])
             stat_out(f,j,r_copy)
         f.close()
 def pro_rl(data_folder,result_dir):
-    root_path="/home/zsy/ns-allinone-3.31/ns-3.31/traces/"
-    all_n=int(len(get_files_name(root_path+data_folder)))
-    mkdir(root_path+result_dir)
-    dst=root_path+result_dir+"ppo"+".txt"
+    soruce_files=get_files_name_contain(data_folder,"reinforce_r.txt")
+    samples=len(soruce_files)
+    mkdir(result_dir)
+    dst=result_dir+"reinforce.txt"
     f=open(dst,"w")
-    for j in range(all_n):
-        name=str(j)+".txt"
-        origin=root_path+data_folder+name
-        r=ReadRewardInfo(origin,7)
+    for j in range(samples):
+        name=soruce_files[j]
+        origin=data_folder+name
+        r=ReadRewardInfo(origin,1)
         r_copy=[]
-        for k in range(1,len(r)):
+        for k in range(0,len(r)):
             r_copy.append(r[k])
         stat_out(f,j,r_copy)
     f.close()
 if __name__ == '__main__':
-    rl_data_dir="log_sim_rl/"
-    tra_oboe_dir="oboe/"
-    oboe_dst="oboe_pro/"
-    #pro_tradition(tra_oboe_dir,tra_oboe_dst)
-    rl_oboe_dir="oboe_log_sim_rl/"
-    pro_rl(rl_oboe_dir,oboe_dst)
+    parent="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/traces/"
+    process_dir=parent+"process/"
+    cooked_test_dir=parent+"hunnan_cooked_test/"
+    rl_cooked_test_dir=parent+"hunnan_rl_cooked_test/"
+    oboe_dir=parent+"hunnan_oboe/"
+    rl_oboe_dir=parent+"hunnan_rl_oboe/"
+    result_dir=process_dir+"cooked_test/"
+    pro_model(cooked_test_dir,result_dir)
+    pro_rl(rl_cooked_test_dir,result_dir)
+    
+    result_dir=process_dir+"oboe/"
+    pro_model(oboe_dir,result_dir)
+    pro_rl(rl_oboe_dir,result_dir)

@@ -60,17 +60,13 @@ def ReadRewardInfo(fileName,column):
         lineArr = line.strip().split()
         r.append(float(lineArr[column]))
     return r
-if __name__ == '__main__':
-    root_path="/home/zsy/ns-allinone-3.31/ns-3.31/traces/"
-    dir="oboe_pro/"
-    out_dir="oboe_cdf/"
-    mkdir(root_path+out_dir)
-    algos=["ppo","festive","panda","tobasco","osmp","raahs","fdash","sftm","svaa"]
+def process_reward_cdf(input_dir,output_dir):
+    algos=["reinforce","festive","panda","tobasco","osmp","raahs","fdash","sftm","svaa"]
     rewards_of_all_algos=[]
     r_min=100
     r_max=-100
     for i in range(len(algos)):
-        name=root_path+dir+algos[i]+".txt"
+        name=input_dir+algos[i]+".txt"
         r=ReadRewardInfo(name,4)
         r.sort()
         rewards_of_all_algos.append(r)
@@ -80,8 +76,6 @@ if __name__ == '__main__':
             r_max=r[-1]
     r_min_int=math.floor(r_min)
     r_max_int=math.ceil(r_max)
-    print(r_min,r_max)
-    print(r_min_int,r_max_int)
     length_unit=1.0
     points_unit=10+1
     delta=length_unit/(points_unit-1)
@@ -89,7 +83,7 @@ if __name__ == '__main__':
     points=semgments*(points_unit-1)+1
     start=1.0*r_min_int
     for i in range(len(algos)):
-        name=root_path+out_dir+algos[i]+".txt"
+        name=output_dir+algos[i]+".txt"
         r=rewards_of_all_algos[i]
         cdf_list=get_cdf_list(r,start,points,delta)
         f=open(name,"w")
@@ -103,4 +97,16 @@ if __name__ == '__main__':
             out=str(j+1)+"\t"+mark_str+"\t"+rate_str+"\t"+str(cdf_list[j].num)+"\n"
             f.write(out)
         f.close()
+if __name__ == '__main__':
+    root_path="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/traces/"
+    cooked_test_dir=root_path+"process/cooked_test/"
+    cdf_cooked_out_dir=root_path+"cdf/cooked/"
+    oboe_dir=root_path+"process/oboe/"
+    cdf_oboe_out_dir=root_path+"cdf/oboe/"
+    mkdir(cdf_cooked_out_dir)
+    mkdir(cdf_oboe_out_dir)
+    process_reward_cdf(cooked_test_dir,cdf_cooked_out_dir)
+    process_reward_cdf(oboe_dir,cdf_oboe_out_dir)
+    
+
         

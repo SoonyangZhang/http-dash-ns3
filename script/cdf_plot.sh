@@ -1,5 +1,5 @@
 #!/bin/bash
-algo1=ppo
+algo1=reinforce
 algo2=festive
 algo3=panda
 algo4=tobasco
@@ -8,8 +8,9 @@ algo6=raahs
 algo7=fdash
 algo8=sftm
 algo9=svaa
-output=cook
-format=pdf
+name=oboe
+output=${name}
+format=png
 gnuplot<<!
 set grid
 set key right bottom
@@ -19,7 +20,7 @@ set xrange [-1:4]
 set yrange [0:1.0]
 set term "${format}"
 set output "${output}-cdf.${format}"
-plot "${algo1}.txt" u 2:3 title "${algo1}" with lines lw 2 lc 0,\
+plot "${algo1}.txt" u 2:3 title "ppo" with lines lw 2 lc 0,\
 "${algo2}.txt" u 2:3 title "${algo2}" with lines lw 2 lc 1,\
 "${algo3}.txt" u 2:3 title "${algo3}" with linespoints pt 6 lw 2 lc 2,\
 "${algo4}.txt" u 2:3 title "${algo4}" with lines lw 2 lc 3,\
@@ -31,7 +32,7 @@ plot "${algo1}.txt" u 2:3 title "${algo1}" with lines lw 2 lc 0,\
 set output
 exit
 !
-output=cook2
+output=${name}2
 gnuplot<<!
 set grid
 set key right bottom

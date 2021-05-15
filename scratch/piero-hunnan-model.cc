@@ -17,7 +17,6 @@ static HunnanNodeContainer BuildP2PTopo(uint32_t msDelay,uint32_t msQdelay){
     nodes.Create (2);
     uint32_t bps=1000000000;//1Gbps
     auto bufSize = std::max<uint32_t> (DEFAULT_PACKET_SIZE, bps * msQdelay / 8000);
-    NS_LOG_INFO("bufsize"<<bufSize/1500);
     HunnanPointToPointHelper p2p;
     p2p.SetDeviceAttribute("DataRate",DataRateValue(DataRate(bps)));
     p2p.SetDeviceAttribute("MaxSize",UintegerValue(bufSize));
@@ -43,16 +42,11 @@ void dash_app_run(std::vector<std::string> &video_log,std::vector<double> &avera
     int segment_ms=4000;
     int init_segment=2;
     DataRate default_rate(2000000);
-
+    std::string delimit("_");
     std::string trace;
     if(result_folder.size()>0){
-        std::string delimit("_");
-        char buf[FILENAME_MAX];
-        memset(buf,0,FILENAME_MAX);        
-        std::string parent=std::string (getcwd(buf, FILENAME_MAX));
-        std::string trace_folder=parent+ "/traces/"+result_folder;
-        MakePath(trace_folder);
-        piero_set_trace_root_folder(trace_folder.c_str());
+        MakePath(result_folder);
+        piero_set_trace_root_folder(result_folder.c_str());
         trace=group_id+delimit+agent_id+delimit+bid+delimit+algo;
     }
     auto topo=BuildP2PTopo(one_trans_delay,link_queue_delay);
@@ -82,6 +76,7 @@ int main(int argc,char *argv[]){
     cmd.Parse (argc, argv);
     std::string prefix("hunnan_");
     std::string ns3_path="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/";
+    std::string trace_folder=ns3_path+"traces/";
     std::string video_path=ns3_path+std::string("video_data/");
     std::string video_name("video_size_");
     std::vector<std::string> video_log;
@@ -139,17 +134,17 @@ int main(int argc,char *argv[]){
         }
         std::sort(bw_traces.begin(), bw_traces.end(),compare_by_string);
     }
-    int dataset_sz=2;//bw_traces.size();
+    int dataset_sz=bw_traces.size();
     uint64_t last_time=PieroTimeMillis();
     if(0==instance.compare("0")){
-        std::string result_folder=prefix+"sample";
+        std::string result_folder=trace_folder+prefix+"sample";
         DatasetDescriptation another_dataset(name,RateTraceType::TIME_BW,TimeUnit::TIME_MS,RateUnit::BW_Kbps);
         for (int i=0;i<algorithms_sz;i++){
             std::string algo(algorithms[i]);
             dash_app_run(video_log,average_rate,algo,&another_dataset,result_folder,bid,group_id,agent_id);
         }
     }else if(0==instance.compare("1")){
-        std::string result_folder=prefix+"cooked";
+        std::string result_folder=trace_folder+prefix+"cooked";
         for(int i=0;i<algorithms_sz;i++){
             std::string algo(algorithms[i]);
             for(int j=0;j<dataset_sz;j++){
@@ -159,7 +154,7 @@ int main(int argc,char *argv[]){
             }
         }
     }else if(0==instance.compare("2")){
-        std::string result_folder=prefix+"cooked_test";
+        std::string result_folder=trace_folder+prefix+"cooked_test";
         for(int i=0;i<algorithms_sz;i++){
             std::string algo(algorithms[i]);
             for(int j=0;j<dataset_sz;j++){
@@ -169,7 +164,7 @@ int main(int argc,char *argv[]){
             }
         }
     }else if(0==instance.compare("3")){
-        std::string result_folder=prefix+"oboe";
+        std::string result_folder=trace_folder+prefix+"oboe";
         for(int i=0;i<algorithms_sz;i++){
             std::string algo(algorithms[i]);
             for(int j=0;j<dataset_sz;j++){

@@ -222,7 +222,6 @@ def multi_thread_train(num_agent,id_span,left,right):
         managers[i].stop_process()
         managers[i].join()
 def multi_thread_test(num_agent,id_span):
-    ra.set_exe_test_template()
     state_pipes=[]
     control_msg_pipes=[]
     managers=[]
@@ -264,9 +263,11 @@ def start_train():
     TRAIN_EPOCH =200000
     fp.remove_dir(ra.NN_INFO_STORE_DIR)
     multi_thread_train(NUM_AGENTS,id_span,0,TRAIN_EPOCH)
-def start_test():
+def start_test(test_trace="cooked"):
     NUM_AGENTS=8
     id_span=4
+    if test_trace=="oboe":
+        ra.set_test_oboe_trace()
     multi_thread_test(NUM_AGENTS,id_span)
 #python ns3-dash-train.py --mode train
 if __name__ == '__main__':
@@ -284,6 +285,8 @@ if __name__ == '__main__':
     if mode=="train":
         start_train()
     elif mode=="test":
-        start_test();
+        start_test()
+    elif mode=="oboe":
+        start_test("oboe")
     delta=time.time()-last
     print("stop: "+str(int(round(delta* 1000))))
