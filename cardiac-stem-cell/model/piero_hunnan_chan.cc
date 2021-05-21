@@ -1,5 +1,6 @@
 #include "piero_hunnan_chan.h"
 #include "piero_flag.h"
+#include  "piero_misc.h"
 #include "ns3/simulator.h"
 #include "ns3/log.h"
 namespace ns3{
@@ -21,6 +22,8 @@ bool HunnanClientChannel::RequestChunk(uint32_t id,uint32_t sz){
     chunk_size_=sz;
     chunk_recv_=0;
     last_packet_seq_=-1;
+    bw_last_time_=Time(0);
+    bw_resample_=true;
     dowloading_=true;
     PieroMessageHeader header(PieroUdpMessageType::PUM_REQ_TYPE);
     PieroChunkRequest req;
@@ -44,6 +47,9 @@ void HunnanClientChannel::GetStats(uint32_t &bytes,Time &start,Time &stop){
     bytes=chunk_recv_old_;
     start=chunk_start_time_;
     stop=chunk_end_time_;
+}
+DataRate HunnanClientChannel::GetEstimateBandwidth() const{
+    return bw_est_;
 }
 void HunnanClientChannel::SetDownloadDoneCallback(Callback<void,Ptr<HunnanClientChannel>,int> cb){
     download_done_cb_=cb;
@@ -89,14 +95,19 @@ void HunnanClientChannel::Receive(Ptr<Packet> packet){
     if(!recv_packet_cb_.IsNull()){
         recv_packet_cb_(this,sz);
     }
+    bool done=false;
     if(chunk_size_==chunk_recv_){
-        dowloading_=false;
 #if  (PIERO_MODULE_DEBUG)
         if(chunk_end_time_>chunk_start_time_){
             double rate=1.0*chunk_recv_old_*8/(chunk_end_time_-chunk_start_time_).GetSeconds();
             NS_LOG_INFO(LOC<<" rate "<<rate);
         }
 #endif
+        done=true;   
+    }
+    UpdateBandwidth(now,sz,done);
+    if(chunk_size_==chunk_recv_){
+        dowloading_=false;
         health_timer_.Cancel();
         if(!download_done_cb_.IsNull()){
             download_done_cb_(this,chunk_recv_);
@@ -105,10 +116,10 @@ void HunnanClientChannel::Receive(Ptr<Packet> packet){
     last_packet_time_=Time(0);
 #endif
     }else{
-    if(health_timer_.IsRunning()){
-        health_timer_.Cancel();
-        health_timer_=Simulator::Schedule(mpt_,&HunnanClientChannel::OnHealthEvent,this);
-    }        
+        if(health_timer_.IsRunning()){
+            health_timer_.Cancel();
+            health_timer_=Simulator::Schedule(mpt_,&HunnanClientChannel::OnHealthEvent,this);
+        }        
     }
 }
 void HunnanClientChannel::SendToNetwork(Ptr<Packet> packet){
@@ -119,6 +130,34 @@ void HunnanClientChannel::OnHealthEvent(){
         NS_ASSERT_MSG(0,"packet loss");
         download_done_cb_(this,0);    
     }
+}
+void HunnanClientChannel::UpdateBandwidth(Time now,int bytes,bool done){
+    if(bw_last_time_.IsZero()){
+        bw_last_time_=now;
+        bw_last_bytes_=sum_bytes_;
+    }
+    if((now>=bw_last_time_+MilliSeconds(kBandwidthUpdateTime))||done){
+        Time delta=now-bw_last_time_;
+        double bps=0.0;
+        int numerator=sum_bytes_-bw_last_bytes_;
+        if(!delta.IsZero()){
+            bps=1.0*numerator*8000/delta.GetMilliSeconds();
+        }
+        bw_last_bytes_=sum_bytes_;
+        bw_last_time_=now;
+        if(bps>0){
+            if(!bw_resample_){
+                double old=bw_est_.GetBitRate();
+                double smooth=(1.0-kBandwidthSmoothFactor)*old+kBandwidthSmoothFactor*bps;
+                bw_est_=DataRate(smooth);
+            }else{
+                bw_est_=DataRate(bps);
+                bw_resample_=false;
+            }
+        }
+        //NS_LOG_INFO(LOC<<DataRate(bps)<<" "<<bw_est_);
+    }
+    sum_bytes_+=bytes;
 }
 
 HunnanServerChannel::HunnanServerChannel(){}

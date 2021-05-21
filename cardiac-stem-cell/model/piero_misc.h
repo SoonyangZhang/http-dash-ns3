@@ -7,13 +7,19 @@ namespace ns3{
 const int kFramesPerSecond=25;
 const int kInitialSegments=3;
 const int kThroughputHorizon=5;
+
 const int kFestiveTarget=20000;
 const int kFestiveHorizon=5;
+
 const double kRebufPenality=4.3;
 static int kDefaultQuality=1;
 const float kMUnit=1000000;
+
 const float kBufferThresh=60*1000; //60 seconds;
 const float kDrainBufferSleepTime=500; //milliseconds
+
+const int kBandwidthUpdateTime=1000; //milliseconds;
+const float kBandwidthSmoothFactor=0.125;
 enum DashPlayerState{
     PLAYER_NOT_STARTED,
     PLAYER_INIT_BUFFERING,

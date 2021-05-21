@@ -133,7 +133,7 @@ void PieroDashBase::RequestSegment(){
         }
         request_timer_=Simulator::Schedule(reply.nextDownloadDelay,&PieroDashBase::OnRequestEvent,this);
         }else{
-            OnRequestEvent();
+            request_timer_=Simulator::ScheduleNow(&PieroDashBase::OnRequestEvent,this);
         }        
     }else{
         Terminate();

@@ -24,29 +24,26 @@ MODEL_DIR="model_data/"
 NN_INFO_STORE_DIR="nn_info/"
 PRETRAIN_MODEL_DIR="pretrain_dir/"
 LOAD_MODEL_DIR="load_model/" #for test agent
-NS3_PATH="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/"
-NS3_EXE_PATH=NS3_PATH+"build/scratch/"
-EXE_TEST_COOK_TEMPLATE=NS3_EXE_PATH+"piero-rl-train --it=2 --log=%s --gr=%s --ag=%s --bwid=%s"
-EXE_TEST_OBOE_TEMPLATE=NS3_EXE_PATH+"piero-rl-train --it=3 --log=%s --gr=%s --ag=%s --bwid=%s"
 
-EXE_TRAIN_TEMPLATE=NS3_EXE_PATH+"piero-rl-train --it=1 --gr=%s --ag=%s --bwid=%s"
-EXE_TEST_TEMPLATE=EXE_TEST_COOK_TEMPLATE
 
-COOKED_TEST_TRACES=NS3_PATH+"bw_data/cooked_test_traces/"
-OBOE_TRACES=NS3_PATH+"bw_data/Oboe_traces/"
-
-TRAIN_BW_FOLDER=NS3_PATH+"bw_data/cooked_traces/"
-TEST_BW_FOLDER=COOKED_TEST_TRACES
+EXE_TRAIN_TEMPLATE=""
+EXE_TEST_TEMPLATE=""
+NUM_TRAIN_TRACES=0
+NUM_TEST_TRACES=0
 
 VIDEO_BIT_RATE = [300.0,750.0,1200.0,1850.0,2850.0,4300.0]  # Kbps
 DEFAULT_QUALITY=1
 CHUNK_TIL_VIDEO_END_CAP =50.0
+MODEL_RECORD_WINDOW=10
+
 AGENT_MSG_STATEBATCH=0x00
 AGENT_MSG_REWARDENTROPY=0x01
 AGENT_MSG_NETPARAM=0x02
 AGENT_MSG_NS3ARGS=0x03
 AGENT_MSG_STOP=0x04
-MODEL_RECORD_WINDOW=10
+
+CENTRAL_AGENT=0x00
+CENTRAL_TEST_AGENT=0x01
 def TimeMillis():
     t=time.time()
     millis=int(round(t * 1000))
@@ -61,13 +58,19 @@ def set_nn_info_store_dir(pathname):
     if '/'!=pathname[sz-1]:
         temp=pathname+"/"
     NN_INFO_STORE_DIR=temp
-def set_test_oboe_trace():
+def set_train_template(program):
+    global EXE_TRAIN_TEMPLATE
+    EXE_TRAIN_TEMPLATE=program
+def set_test_template(program):
     global EXE_TEST_TEMPLATE
-    global EXE_TEST_OBOE_TEMPLATE
-    global TEST_BW_FOLDER
-    global OBOE_TRACES
-    EXE_TEST_TEMPLATE=EXE_TEST_OBOE_TEMPLATE
-    TEST_BW_FOLDER=OBOE_TRACES
+    EXE_TEST_TEMPLATE=program
+def set_num_train_traces(v):
+    global NUM_TRAIN_TRACES
+    NUM_TRAIN_TRACES=v
+def set_num_test_traces(v):
+    global NUM_TEST_TRACES
+    NUM_TEST_TRACES=v
+
 class StateBatch:
     def __init__(self,agent_id,s_batch, a_batch, p_batch, v_batch):
         self.agent_id=agent_id
@@ -84,9 +87,9 @@ class ActorParameter:
     def __init__(self,params):
         self.params=params
 class Ns3Args:
-    def __init__(self,train_or_test,log,group_id,trace_id_list):
+    def __init__(self,distributor,train_or_test,group_id,trace_id_list):
+        self.distributor=distributor
         self.train_or_test=train_or_test
-        self.log=log
         self.group_id=group_id
         self.trace_id_list=trace_id_list
 class ModelInfo():
@@ -150,10 +153,10 @@ class CentralAgent(mp.Process):
         signal.signal(signal.SIGTSTP,self.handle_signal)
         for i in range(len(self.control_msg_pipes)):
             self.control_msg_pipes[i][1].close()
-        num_train_traces=fp.count_files(TRAIN_BW_FOLDER)
-        num_test_traces=fp.count_files(TEST_BW_FOLDER)
-        self.train_trace_id_list=[i for i in range(num_train_traces)]
-        self.test_trace_id_list=[i for i in range(num_test_traces)]
+        assert NUM_TRAIN_TRACES>0
+        assert NUM_TEST_TRACES>0
+        self.train_trace_id_list=[i for i in range(NUM_TRAIN_TRACES)]
+        self.test_trace_id_list=[i for i in range(NUM_TEST_TRACES)]
         fp.mkdir(NN_INFO_STORE_DIR)
         fp.mkdir(NN_INFO_STORE_DIR+MODEL_DIR)
         pathname=NN_INFO_STORE_DIR+str(TimeMillis32())+"_reward_and_entropy.txt"
@@ -276,7 +279,7 @@ class CentralAgent(mp.Process):
             n=min(remain,self.id_span)
             for j in range(n):
                 l.append(sample[off+j])
-            args=Ns3Args(True,False,group_id,l)
+            args=Ns3Args(CENTRAL_AGENT,True,group_id,l)
             self.control_msg_pipes[i][0].send((AGENT_MSG_NS3ARGS,args))
             remain=remain-n
             off+=n
@@ -292,7 +295,7 @@ class CentralAgent(mp.Process):
             n=min(tasks,self.id_span)
             for j in range(n):
                 l.append(self.test_trace_id_list[self.test_trace_index+j])
-            args=Ns3Args(False,False,group_id,l)
+            args=Ns3Args(CENTRAL_AGENT,False,group_id,l)
             self.control_msg_pipes[i][0].send((AGENT_MSG_NS3ARGS,args))
             tasks=tasks-n
             self.test_trace_index+=n
@@ -354,8 +357,8 @@ class CentralTestAgent(mp.Process):
         signal.signal(signal.SIGTSTP,self.handle_signal)
         for i in range(len(self.control_msg_pipes)):
             self.control_msg_pipes[i][1].close()
-        num_test_traces=fp.count_files(TEST_BW_FOLDER)
-        self.test_trace_id_list=[i for i in range(num_test_traces)]
+        assert NUM_TEST_TRACES>0
+        self.test_trace_id_list=[i for i in range(NUM_TEST_TRACES)]
         fp.mkdir(NN_INFO_STORE_DIR+MODEL_DIR)
         self._init_tensorflow()
         saver= tf.train.Saver()
@@ -438,7 +441,7 @@ class CentralTestAgent(mp.Process):
             n=min(tasks,self.id_span)
             for j in range(n):
                 l.append(self.test_trace_id_list[self.test_trace_index+j])
-            args=Ns3Args(False,True,group_id,l)
+            args=Ns3Args(CENTRAL_TEST_AGENT,False,group_id,l)
             self.control_msg_pipes[i][0].send((AGENT_MSG_NS3ARGS,args))
             tasks=tasks-n
             self.test_trace_index+=n
@@ -564,17 +567,18 @@ class Agent(object):
     def update_net_param(self,params):
         #synchronization of the network parameters from the coordinator
         self.actor.set_network_params(self.sess,params)
-    def create_ns3_env(self,train_or_test,log_flag,group_id,trace_id):
+    def create_ns3_env(self,distributor,train_or_test,group_id,trace_id):
         self.reset_state()
         self.train_or_test=train_or_test
         self.group_id=group_id
         self.trace_id=trace_id
+        cmd=""
         if train_or_test:
             exe_cmd=EXE_TRAIN_TEMPLATE
             cmd=exe_cmd%(str(group_id),str(self.agent_id),str(trace_id))
         else:
             log_out=str("0")
-            if log_flag:
+            if distributor==CENTRAL_TEST_AGENT:
                 log_out=str("1")
             exe_cmd=EXE_TEST_TEMPLATE
             cmd=exe_cmd%(log_out,str(group_id),str(self.agent_id),str(trace_id))
@@ -694,11 +698,11 @@ class AgentManager(mp.Process):
                     self.state_pipe[1].send(res)
     def _process_ns3_args(self,msg):
         assert len(msg.trace_id_list)<=len(self.agents)
+        distributor=msg.distributor
         train_or_test=msg.train_or_test
-        log_flag=msg.log
         group_id=msg.group_id
         for i in range(len(msg.trace_id_list)):
-            self.agents[i].create_ns3_env(train_or_test,log_flag,group_id,msg.trace_id_list[i])
+            self.agents[i].create_ns3_env(distributor,train_or_test,group_id,msg.trace_id_list[i])
     def send_state_batch(self,batch):
         self.control_msg_pipe[1].send((AGENT_MSG_STATEBATCH,batch))
     def reward_entropy(self,re):

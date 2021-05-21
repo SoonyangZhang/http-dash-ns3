@@ -94,7 +94,6 @@ int main(int argc,char *argv[]){
     }
     const char *algorithms[]={"festive","panda","tobasco","osmp","raahs","fdash","sftm","svaa"};
     int algorithms_sz=sizeof(algorithms)/sizeof(algorithms[0]);
-    std::string name=ns3_path+std::string("bw_data/Oboe-master/traces/trace_0.txt");
     DatasetDescriptation cooked_dataset[]={
         {ns3_path+std::string("bw_data/cooked_traces/"),
         RateTraceType::TIME_BW,TimeUnit::TIME_S,RateUnit::BW_Mbps},
@@ -137,11 +136,12 @@ int main(int argc,char *argv[]){
     int dataset_sz=bw_traces.size();
     uint64_t last_time=PieroTimeMillis();
     if(0==instance.compare("0")){
+        std::string name=ns3_path+std::string("bw_data/Oboe_traces/trace_0.txt");
         std::string result_folder=trace_folder+prefix+"sample";
-        DatasetDescriptation another_dataset(name,RateTraceType::TIME_BW,TimeUnit::TIME_MS,RateUnit::BW_Kbps);
-        for (int i=0;i<algorithms_sz;i++){
+        DatasetDescriptation another_dataset(name,RateTraceType::TIME_BW,TimeUnit::TIME_S,RateUnit::BW_Mbps);
+        for (int i=0;i<1/*algorithms_sz*/;i++){
             std::string algo(algorithms[i]);
-            dash_app_run(video_log,average_rate,algo,&another_dataset,result_folder,bid,group_id,agent_id);
+            dash_app_run(video_log,average_rate,algo,nullptr/*&another_dataset*/,result_folder,bid,group_id,agent_id);
         }
     }else if(0==instance.compare("1")){
         std::string result_folder=trace_folder+prefix+"cooked";

@@ -29,12 +29,7 @@ Eight algorithms are implemented:
 ```
 std::string ns3_path="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/";//(the path of ns3)  
 ```
-11 configure environmental variables:  
-```
-gedit /etc/profile  
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/zsy/ns-allinone-3.31/ns-3.31/build/lib/  
-```
-12 Rebuid ns3.  
+11 Rebuid ns3.  
 ```
 ./waf configure  
 ./waf build  
@@ -56,7 +51,7 @@ sudo su
 ./waf --run "scratch/piero-hunnan-model --it=3"  
 ```
 ## Train a reinforce learning algorithm:  
-- The ns3 path in rl_agent.py (Line 27) should be changed:  
+- The ns3 path in ns3-dash-train.py should be changed:  
 
 ```
 NS3_PATH="/home/ipcom/zsy/ns-allinone-3.31/ns-3.31/"

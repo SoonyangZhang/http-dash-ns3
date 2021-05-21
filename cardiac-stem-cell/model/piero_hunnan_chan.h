@@ -1,5 +1,6 @@
 #pragma  once
 #include "ns3/nstime.h"
+#include "ns3/data-rate.h"
 #include "ns3/piero_header.h"
 #include "ns3/hunnan-module.h"
 namespace ns3{
@@ -10,6 +11,7 @@ public:
     bool RequestChunk(uint32_t id,uint32_t sz);
     void FireStopSignal();
     void GetStats(uint32_t &bytes,Time &start,Time &stop);
+    DataRate GetEstimateBandwidth() const;
     void SetDownloadDoneCallback(Callback<void,Ptr<HunnanClientChannel>,int> cb);
     void SetRecvCallBack(Callback<void,Ptr<HunnanClientChannel>,int> cb);
 private:
@@ -17,6 +19,7 @@ private:
     void Receive(Ptr<Packet> packet) override;
     void SendToNetwork(Ptr<Packet> packet);
     void OnHealthEvent();
+    void UpdateBandwidth(Time now,int bytes,bool done);
     Time mpt_;//link maxmium processing delay
     uint32_t chunk_size_=0;
     uint32_t chunk_recv_old_=0;
@@ -31,6 +34,11 @@ private:
 #if defined (PIERO_HEADER_DBUG)
     Time last_packet_time_=Time(0);
 #endif
+    bool bw_resample_=false;
+    Time bw_last_time_=Time(0);
+    uint64_t bw_last_bytes_=0;
+    uint64_t sum_bytes_=0;
+    DataRate bw_est_;
 };
 class HunnanServerChannel: public HunnanApplication{
 public:
