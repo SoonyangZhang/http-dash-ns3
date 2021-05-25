@@ -1,4 +1,5 @@
 #pragma once
+#include <iostream>
 #include <string>
 #include <deque>
 #include <vector>
@@ -20,6 +21,9 @@ const float kDrainBufferSleepTime=500; //milliseconds
 
 const int kBandwidthUpdateTime=1000; //milliseconds;
 const float kBandwidthSmoothFactor=0.125;
+const int kBandwidthWindowSize=10;
+
+const int kPieroPacketSize=1400;
 enum DashPlayerState{
     PLAYER_NOT_STARTED,
     PLAYER_INIT_BUFFERING,
@@ -66,6 +70,42 @@ public:
     virtual ~AdaptationAlgorithm(){}
     virtual AlgorithmReply GetNextQuality(PieroDashBase *client,Time now,int pre_quality,int segment_count)=0;
     virtual void LastSegmentArrive(PieroDashBase *client){}
+};
+template <typename T>
+class Matrix
+{
+public:
+    Matrix(int row, int col)
+        :m_row(row), m_col(col), m_data(nullptr)
+    {
+        //() is used to init value
+        m_data = new T[m_row * m_col]();
+    }
+
+    ~Matrix()
+    {
+        if (m_data != nullptr)
+        {
+            delete[] m_data;
+            m_data = nullptr;
+        }
+    }
+    T * operator[](int k)
+    {
+        return &m_data[k * m_col];
+    }
+    void Print(){
+        for(int i=0;i<m_row;i++){
+            for(int j=0;j<m_col;j++){
+                std::cout<< m_data[i*m_col+j]<<" ";
+            }
+            std::cout<<std::endl;
+        }
+    }
+private:
+    int m_row;
+    int m_col;
+    T *m_data;
 };
 void ReadSegmentFromFile(std::vector<std::string>& video_log,struct VideoData &video_data);
 bool MakePath(const std::string& path);

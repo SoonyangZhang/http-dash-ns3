@@ -37,16 +37,23 @@ PieroDashBase::PieroDashBase(std::vector<std::string> &video_log,std::vector<dou
     OpenTrace(trace_name);
 }
 PieroDashBase::~PieroDashBase(){
+#if (PIERO_LOG_AVG)
     LogAverageRate();
+    if(f_avg_rate_.is_open()){
+        f_avg_rate_.close();
+    }
+#endif
+#if (PIERO_LOG_PLAY)
     if(f_play_.is_open()){
         f_play_.close();
     }
+#endif
     if(f_reward_.is_open()){
         f_reward_.close();
     }
-#if defined (PIERO_LOG_RATE)
-    if(f_rate_.is_open()){
-        f_rate_.close();
+#if (PIERO_LOG_RATE)
+    if(f_chan_rate_.is_open()){
+        f_chan_rate_.close();
     }
 #endif
 }
@@ -165,6 +172,16 @@ void PieroDashBase::ReceiveOnePacket(int size){
         buffer_data_.bufferLevelNew.push_back (buffer_data_.bufferLevelOld.back () + video_data_.segmentDuration);
         throughput_.transmissionEnd.push_back(now);
         throughput_.bytesReceived.push_back(previous_bytes);
+        {
+            DataRate rate(0);
+            Time start_temp=(*throughput_.transmissionStart.rbegin());
+            if(now>start_temp){
+                Time delta=now-start_temp;
+                double bps=1.0*previous_bytes*8000/delta.GetMilliSeconds();
+                rate=DataRate(bps);
+            }
+            rate_vec_.push_back(rate);
+        }
         segment_counter_++;
         segments_in_buffer_++;
         Time pause=pause_time_;
@@ -261,27 +278,37 @@ void PieroDashBase::OpenTrace(std::string &name){
         }
     }
     {
-        std::string pathname =path+name+".txt";
-        f_play_.open(pathname.c_str(),std::fstream::out);
-    }
-    {
         std::string pathname =path+name+"_r.txt";
         f_reward_.open(pathname.c_str(),std::fstream::out);
     }
-#if defined (PIERO_LOG_RATE)
+#if (PIERO_LOG_PLAY)
     {
-        std::string pathname =path+name+"_rate.txt";
-        f_rate_.open(pathname.c_str(),std::fstream::out);
+        std::string pathname =path+name+".txt";
+        f_play_.open(pathname.c_str(),std::fstream::out);
+    }
+#endif
+#if (PIERO_LOG_RATE)
+{
+    std::string pathname =path+name+"_rate.txt";
+    f_chan_rate_.open(pathname.c_str(),std::fstream::out);
+}
+#endif
+#if (PIERO_LOG_AVG)
+    {
+        std::string pathname =path+name+"_avg.txt";
+        f_avg_rate_.open(pathname.c_str(),std::fstream::out);
     }
 #endif
 }
 void PieroDashBase::LogPlayStatus(){
+#if (PIERO_LOG_PLAY)
     if(f_play_.is_open()){
         Time now=Simulator::Now();
         int wall_time=(now-start_time_).GetMilliSeconds();
         f_play_<<wall_time<<"\t"<<segments_in_buffer_<<std::endl;
         f_play_.flush();
     }
+#endif
 }
 void PieroDashBase::LogQoEInfo(){
     if(f_reward_.is_open()){
@@ -290,28 +317,32 @@ void PieroDashBase::LogQoEInfo(){
             double qoe=qoe_rebuf_[i].first;
             double rebuf=qoe_rebuf_[i].second;
             int level=history_quality_.at(i);
-            f_reward_<<i<<"\t"<<qoe<<"\t"<<rebuf<<"\t"<<level<<std::endl;
+            float kbps=1.0*rate_vec_.at(i).GetBitRate()/1000;
+            f_reward_<<i<<"\t"<<qoe<<"\t"<<rebuf<<"\t"<<level<<"\t"<<kbps<<std::endl;
         }
     }
 }
 void PieroDashBase::LogAverageRate(){
-    if(f_play_.is_open()){
-        double average_kbps_1=0.0;
-        double average_kbps_2=0.0;
+#if (PIERO_LOG_AVG)
+    if(f_avg_rate_.is_open()){
+        double kbps1=0.0;
+        double kbps2=0.0;
         if(video_data_.representation.size()==0){
             return ;
         }
         int segment_num=video_data_.representation[0].size();
-        average_kbps_1=1.0*total_bytes_*8/(segment_num*video_data_.segmentDuration);
+        kbps1=1.0*total_bytes_*8/(segment_num*video_data_.segmentDuration);
         Time denominator=Time(0);
-        int n=throughput_.transmissionEnd.size();
+        int n=rate_vec_.size();
+        double sum_bps=0.0;
         for(int i=0;i<n;i++){
-            denominator=denominator+(throughput_.transmissionEnd.at(i)-throughput_.transmissionStart.at(i));
+            sum_bps+=1.0*rate_vec_.at(i).GetBitRate()/1000;
         }
-        if(denominator!=Time(0)){
-            average_kbps_2=1.0*total_bytes_*8/(denominator.GetMilliSeconds());
+        if(n>0){
+            kbps2=sum_bps/n;
         }
-        f_play_<<average_kbps_1<<"\t"<<average_kbps_2<<std::endl;
+        f_avg_rate_<<kbps1<<"\t"<<kbps2<<std::endl;
     }
+#endif
 }
 }

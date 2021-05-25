@@ -1,5 +1,6 @@
 #include <string.h>
 #include "ns3/log.h"
+#include "ns3/data-rate.h"
 #include "piero_udp_chan.h"
 #include "piero_hunnan_chan.h"
 #include "piero_dash_app.h"
@@ -63,7 +64,7 @@ void DashUdpSource::FireTerminateSignal(){
 }
 void DashUdpSource::LogChannelRate(Ptr<UdpClientChannel> channel){
 #if  (PIERO_LOG_RATE)
-    if(f_rate_.is_open()){
+    if(f_chan_rate_.is_open()){
         uintptr_t ptr=(uintptr_t)PeekPointer(channel);
         uint32_t bytes=0;
         Time t1,t2;
@@ -72,7 +73,7 @@ void DashUdpSource::LogChannelRate(Ptr<UdpClientChannel> channel){
         if(t2>t1){
             kbps=1.0*bytes*8/(t2-t1).GetMilliSeconds();
         }
-        f_rate_<<index_<<"\t"<<ptr<<"\t"<<kbps<<std::endl;
+        f_chan_rate_<<index_<<"\t"<<ptr<<"\t"<<kbps<<std::endl;
     }
 #endif
 }
@@ -131,6 +132,13 @@ void DashHunnanSource::DownloadDone(Ptr<HunnanClientChannel> channel,int size){
 #endif
     PostProcessingAfterPacket();
 }
+Ptr<HunnanClientChannel> DashHunnanSource::GetChannel(int chan_id){
+    Ptr<HunnanClientChannel> channel;
+    if(chan_id>=0&&chan_id<(int)channels_.size()){
+        channel=channels_.at(chan_id);
+    }
+    return channel;
+}
 void DashHunnanSource::OnRequestEvent(){
     if(video_data_.representation.size()>0){
         int segment_num=video_data_.representation[0].size();
@@ -152,7 +160,7 @@ void DashHunnanSource::FireTerminateSignal(){
 }
 void DashHunnanSource::LogChannelRate(Ptr<HunnanClientChannel> channel){
 #if  (PIERO_LOG_RATE)
-    if(f_rate_.is_open()){
+    if(f_chan_rate_.is_open()){
         uintptr_t ptr=(uintptr_t)PeekPointer(channel);
         uint32_t bytes=0;
         Time t1,t2;
@@ -161,10 +169,92 @@ void DashHunnanSource::LogChannelRate(Ptr<HunnanClientChannel> channel){
         if(t2>t1){
             kbps=1.0*bytes*8/(t2-t1).GetMilliSeconds();
         }
-        f_rate_<<index_<<"\t"<<ptr<<"\t"<<kbps<<std::endl;
+        f_chan_rate_<<channel->GetUuid()<<"\t"<<ptr<<"\t"<<kbps<<std::endl;
     }
 #endif
 }
+
+DashChunkSelector::DashChunkSelector(std::vector<std::string> &video_log,std::vector<double> &average_rate,std::string &trace_name,
+                int segment_ms,int init_segments,Time start,Time stop)
+:DashHunnanSource(video_log,average_rate,trace_name,segment_ms,init_segments,start,stop){}
+void DashChunkSelector::SetDispatchAlgo(uint8_t type,PieroPathInfo& info){
+    switch (type){
+        case DEF_CHUNK_SPLIT:{
+            dispatcher_.reset(new DefaultChunkDispatch(this,ChunkDispatchInterface::CHUNK_SPLIT));
+            break;
+        }
+        case DEF_CHUNK_UNSPLIT:{
+            dispatcher_.reset(new DefaultChunkDispatch(this,ChunkDispatchInterface::CHUNK_UNSPLIT));
+            break;
+        }
+        case EPS_CHUNK_SPLIT:{
+            dispatcher_.reset(new EpsilonChunkDispatch(this,ChunkDispatchInterface::CHUNK_SPLIT));
+            break;
+        }
+        case EPS_CHUNK_UNSPLIT:{
+            dispatcher_.reset(new EpsilonChunkDispatch(this,ChunkDispatchInterface::CHUNK_UNSPLIT));
+            break;
+        }
+        case UCB_CHUNK_SPLIT:{
+            dispatcher_.reset(new UcbChunkDispatch(this,ChunkDispatchInterface::CHUNK_SPLIT));
+            break;
+        }
+        case UCB_CHUNK_UNSPLIT:{
+            dispatcher_.reset(new UcbChunkDispatch(this,ChunkDispatchInterface::CHUNK_UNSPLIT));
+            break;
+        }
+    }
+    NS_ASSERT(dispatcher_);
+    dispatcher_->RegisterPathInfo(info);
+}
+ChunkDispatchInterface *DashChunkSelector::PeekDispatcher(){
+    return dispatcher_.get();
+}
+void DashChunkSelector::ChunkDispatch(int chan_id,int chunk_id,uint64_t bytes){
+    NS_ASSERT(chan_id>=0&&chan_id<(int)channels_.size());
+    channels_.at(chan_id)->RequestChunk(chunk_id,bytes);
+}
+void DashChunkSelector::FireTerminateSignal(){
+    round_timer_.Cancel();
+    DashHunnanSource::FireTerminateSignal();
+}
+void DashChunkSelector::UpdateRound(){
+    Time now=Simulator::Now();
+    int sz=channels_.size();
+    if(round_timer_.IsExpired()){
+        for(int i=0;i<sz;i++){
+            channels_.at(i)->UpdateRound(now);
+        }
+        Time next=MilliSeconds(100);
+        round_timer_=Simulator::Schedule(next,&DashChunkSelector::UpdateRound,this);
+    }
+}
+void DashChunkSelector::OnRequestEvent(){
+    if(first_request_){
+        round_timer_=Simulator::ScheduleNow(&DashChunkSelector::UpdateRound,this);
+        first_request_=false;
+    }
+    if(video_data_.representation.size()>0){
+        int segment_num=video_data_.representation[0].size();
+        Time now=Simulator::Now();
+        if(index_<segment_num){
+            throughput_.transmissionRequested.push_back(now);
+            NS_ASSERT(dispatcher_);
+            dispatcher_->DispatchRequest(index_,segment_bytes_);
+            index_++;
+        }
+    }
+}
+
+MultiNicMultiServerDash::MultiNicMultiServerDash(std::vector<std::string> &video_log,std::vector<double> &average_rate,std::string &trace_name,
+                int segment_ms,int init_segments,Time start,Time stop)
+:DashChunkSelector(video_log,average_rate,trace_name,segment_ms,init_segments,start,stop){}
+MultiNicMultiServerDash::~MultiNicMultiServerDash(){
+#if (PIERO_MODULE_DEBUG)
+    NS_LOG_INFO("MultiNicMultiServerDash dtor"<<this);
+#endif
+}
+
 DashHunnanSink::DashHunnanSink(Time start,Time stop,DatasetDescriptation *des,DataRate init_rate):
 PieroRateLimitBase(start,stop,des,init_rate){
     if(des){

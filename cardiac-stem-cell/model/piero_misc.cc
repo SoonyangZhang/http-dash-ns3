@@ -158,11 +158,13 @@ int CountFileLines(std::string &name){
     return lines;
 }
 void BufferSplit(std::string &line,std::vector<std::string>&numbers){
+    numbers.clear();
     int n=line.size();
     int start=-1;
     int stop=-1;
+    char buffer[32];
     for(int i=0;i<n;i++){
-        bool success=isdigit(line[i])||(line[i]=='.');
+        bool success=(isdigit(line[i])||(line[i]=='.'));
         if(start==-1&&success){
             start=i;
         }
@@ -173,7 +175,12 @@ void BufferSplit(std::string &line,std::vector<std::string>&numbers){
             stop=i;
         }
         if(start>=0&&stop>=start){
-            std::string one=line.substr(start,stop);
+            //std::string one=line.substr(start,stop);
+            memset(buffer,0,sizeof(buffer));
+            for(int j=start;j<stop;j++){
+                buffer[j-start]=line[j];
+            }
+            std::string one(buffer,strlen(buffer));
             numbers.push_back(one);
             start=-1;
             stop=-1;

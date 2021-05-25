@@ -1,6 +1,10 @@
 #pragma once
+#include <vector>
+#include <memory>
+#include "ns3/event-id.h"
 #include "ns3/piero_dash_base.h"
 #include "ns3/piero_rate_limit.h"
+#include "ns3/piero_chunk_dispatch.h"
 namespace ns3{
 class UdpClientChannel;
 class UdpServerChannel;
@@ -38,12 +42,40 @@ public:
     bool RegisterChannel(Ptr<HunnanClientChannel> channel);
     void RecvPacket(Ptr<HunnanClientChannel> channel,int size);
     virtual void DownloadDone(Ptr<HunnanClientChannel> channel,int size);
+    Ptr<HunnanClientChannel> GetChannel(int chan_id);
 protected:
-    void OnRequestEvent() override;
-    void FireTerminateSignal() override;
+    virtual void OnRequestEvent();
+    virtual void FireTerminateSignal();
     void LogChannelRate(Ptr<HunnanClientChannel> channel);
     std::deque<Ptr<HunnanClientChannel>> channels_;
 };
+class DashChunkSelector:public DashHunnanSource{
+public:
+    DashChunkSelector(std::vector<std::string> &video_log,std::vector<double> &average_rate,std::string &trace_name,
+                int segment_ms,int init_segments,Time start,Time stop);
+    virtual ~DashChunkSelector(){}
+    void SetDispatchAlgo(uint8_t type,PieroPathInfo& info);
+    ChunkDispatchInterface *PeekDispatcher();
+    void ChunkDispatch(int chan_id,int chunk_id,uint64_t bytes);
+protected:
+    void OnRequestEvent() override;
+    void FireTerminateSignal() override;
+    void UpdateRound();
+    bool first_request_=true;
+    EventId round_timer_;
+    std::unique_ptr<ChunkDispatchInterface> dispatcher_;
+};
+// one nic, multiple servers
+// for each chunk, determine which server to download from.
+//two nic, multiple servers
+// for each chunk, split it and choose two server to download from.
+class MultiNicMultiServerDash:public DashChunkSelector{
+public:
+    MultiNicMultiServerDash(std::vector<std::string> &video_log,std::vector<double> &average_rate,std::string &trace_name,
+                int segment_ms,int init_segments,Time start,Time stop=Time(0));
+    ~MultiNicMultiServerDash();
+};
+
 class DashHunnanSink:public PieroRateLimitBase{
 public:
     DashHunnanSink(Time start,Time stop=Time(0),DatasetDescriptation *des=nullptr,DataRate init_rate=DataRate(2000000));

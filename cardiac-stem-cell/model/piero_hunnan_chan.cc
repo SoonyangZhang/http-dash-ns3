@@ -4,10 +4,20 @@
 #include "ns3/simulator.h"
 #include "ns3/log.h"
 namespace ns3{
+namespace{
+    static int kHunNanChanId=0;
+}
 const char *piero_hunnan_chan_name="piero_hunnan_chan";
 NS_LOG_COMPONENT_DEFINE(piero_hunnan_chan_name);
 #define LOC piero_hunnan_chan_name<<__LINE__<<":"
-HunnanClientChannel::HunnanClientChannel(Time max_processing_delay):mpt_(max_processing_delay){}
+HunnanClientChannel::HunnanClientChannel(Time max_processing_delay):
+mpt_(max_processing_delay),
+bw_avg_(DataRate(0)),
+bw_sample_(DataRate(0)),
+max_bandwidth_(kBandwidthWindowSize,DataRate(0),0){
+    uuid_=kHunNanChanId;
+    kHunNanChanId++;
+}
 HunnanClientChannel::~HunnanClientChannel(){
 #if (PIERO_MODULE_DEBUG)
     NS_LOG_INFO("HunnanClientChannel dtor"<<this);
@@ -23,7 +33,6 @@ bool HunnanClientChannel::RequestChunk(uint32_t id,uint32_t sz){
     chunk_recv_=0;
     last_packet_seq_=-1;
     bw_last_time_=Time(0);
-    bw_resample_=true;
     dowloading_=true;
     PieroMessageHeader header(PieroUdpMessageType::PUM_REQ_TYPE);
     PieroChunkRequest req;
@@ -48,8 +57,22 @@ void HunnanClientChannel::GetStats(uint32_t &bytes,Time &start,Time &stop){
     start=chunk_start_time_;
     stop=chunk_end_time_;
 }
-DataRate HunnanClientChannel::GetEstimateBandwidth() const{
-    return bw_est_;
+DataRate HunnanClientChannel::GetMaxBandwidth() const{
+    return max_bandwidth_.GetBest();
+}
+DataRate HunnanClientChannel::GetAverageBandwidth() const{
+    return bw_avg_;
+}
+void HunnanClientChannel::UpdateRound(Time now){
+    DataRate rate=bw_sample_;
+    if(round_update_time_.IsZero()||(now>=round_update_time_+MilliSeconds(kBandwidthUpdateTime))){
+        round_update_time_=now;
+        round_count_++;
+    }
+    if(bw_sample_time_.IsZero()||(now>=bw_sample_time_+MilliSeconds(kBandwidthUpdateTime))){
+        rate=DataRate(0);
+    }
+    max_bandwidth_.Update(rate,round_count_);
 }
 void HunnanClientChannel::SetDownloadDoneCallback(Callback<void,Ptr<HunnanClientChannel>,int> cb){
     download_done_cb_=cb;
@@ -105,7 +128,7 @@ void HunnanClientChannel::Receive(Ptr<Packet> packet){
 #endif
         done=true;   
     }
-    UpdateBandwidth(now,sz,done);
+    MayUpdateBandwidth(now,sz,done);
     if(chunk_size_==chunk_recv_){
         dowloading_=false;
         health_timer_.Cancel();
@@ -131,7 +154,7 @@ void HunnanClientChannel::OnHealthEvent(){
         download_done_cb_(this,0);    
     }
 }
-void HunnanClientChannel::UpdateBandwidth(Time now,int bytes,bool done){
+void HunnanClientChannel::MayUpdateBandwidth(Time now,int bytes,bool done){
     if(bw_last_time_.IsZero()){
         bw_last_time_=now;
         bw_last_bytes_=sum_bytes_;
@@ -146,18 +169,24 @@ void HunnanClientChannel::UpdateBandwidth(Time now,int bytes,bool done){
         bw_last_bytes_=sum_bytes_;
         bw_last_time_=now;
         if(bps>0){
-            if(!bw_resample_){
-                double old=bw_est_.GetBitRate();
-                double smooth=(1.0-kBandwidthSmoothFactor)*old+kBandwidthSmoothFactor*bps;
-                bw_est_=DataRate(smooth);
-            }else{
-                bw_est_=DataRate(bps);
-                bw_resample_=false;
-            }
+            UpdateBanwidth(now,DataRate(bps));
         }
-        //NS_LOG_INFO(LOC<<DataRate(bps)<<" "<<bw_est_);
+        //NS_LOG_INFO(LOC<<uuid_<<" "<<DataRate(bps)<<" "<<bw_avg_<<" "<<GetMaxBandwidth());
     }
     sum_bytes_+=bytes;
+}
+void HunnanClientChannel::UpdateBanwidth(Time now,DataRate sample){
+    bw_sample_time_=now;
+    bw_sample_=sample;
+    if(bw_avg_==DataRate(0)){
+        bw_avg_=bw_sample_;
+    }else{
+        double old_bps=bw_avg_.GetBitRate();
+        double new_bps=sample.GetBitRate();
+        double smooth=old_bps*kBandwidthSmoothFactor+new_bps*(1-kBandwidthSmoothFactor);
+        bw_avg_=DataRate(smooth);
+    }
+    max_bandwidth_.Update(bw_sample_,round_count_);
 }
 
 HunnanServerChannel::HunnanServerChannel(){}

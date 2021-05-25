@@ -10,8 +10,7 @@ namespace ns3{
 const char *piero_rate_limit_name="piero_rate_limit";
 NS_LOG_COMPONENT_DEFINE(piero_rate_limit_name);
 #define LOC piero_rate_limit_name<<__LINE__<<":"
-const uint32_t kPacketSize=1400;
-const uint64_t kMinRate=50000;//50 kbps;
+const int64_t kMinChannelRate=50000;//50 kbps;
 PieroRateLimitBase::PieroRateLimitBase(Time start,Time stop,DatasetDescriptation *des,DataRate init_rate){
     start_time_=start;
     stop_time_=stop;
@@ -97,7 +96,7 @@ void PieroRateLimitBase::StopApplication(){
 void PieroRateLimitBase::OnPacerEvent(){
     if(pacer_.IsExpired()&&request_bytes_>0){
         if(send_bytes_<request_bytes_){
-            uint32_t pkt_sz=std::min(kPacketSize,request_bytes_-send_bytes_);
+            uint32_t pkt_sz=std::min((uint32_t)kPieroPacketSize,request_bytes_-send_bytes_);
             send_bytes_+=pkt_sz;
             Ptr<Packet> p=Create<Packet>(pkt_sz);
             #if (PIERO_HEADER_DBUG)
@@ -179,8 +178,8 @@ bool PieroRateLimitBase::ReadBandwidthFromFile(uint32_t index){
             trace_time_[index]=MilliSeconds(ms);
             double bw=std::stod(numbers[1]);
             int64_t bps=rate_unit_*bw;
-            if(bps<kMinRate){
-                bps=kMinRate;
+            if(bps<kMinChannelRate){
+                bps=kMinChannelRate;
             }
             trace_rate_[index]=DataRate(bps);
             //NS_LOG_INFO(trace_rate_[index]);

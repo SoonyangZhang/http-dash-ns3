@@ -8,9 +8,12 @@
 #include "ns3/object.h"
 #include "ns3/callback.h"
 #include "ns3/event-id.h"
+#include "ns3/data-rate.h"
 #include "piero_misc.h"
 namespace ns3{
-#define PIERO_LOG_RATE 1
+#define PIERO_LOG_PLAY 0
+#define PIERO_LOG_RATE 0
+#define PIERO_LOG_AVG 1
 void piero_set_trace_root_folder(const char *name);
 class PieroDashBase: public Object{
 public:
@@ -51,6 +54,7 @@ protected:
     Time stop_time_;
     struct VideoData video_data_;
     ThroughputData throughput_;
+    std::vector<DataRate> rate_vec_;
     BufferData buffer_data_;
     std::string algo_name_;
     std::unique_ptr<AdaptationAlgorithm> algorithm_;
@@ -78,11 +82,15 @@ protected:
     EventId stop_event_;
     EventId player_timer_;
     EventId request_timer_;
-    
-    std::fstream f_play_;
     std::fstream f_reward_;
-#if defined (PIERO_LOG_RATE)
-    std::fstream f_rate_;
+#if PIERO_LOG_PLAY
+    std::fstream f_play_;
+#endif
+#if (PIERO_LOG_RATE)
+    std::fstream f_chan_rate_;
+#endif
+#if (PIERO_LOG_AVG)
+    std::fstream f_avg_rate_;
 #endif
 };
 }

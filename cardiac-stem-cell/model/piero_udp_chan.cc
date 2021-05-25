@@ -86,7 +86,7 @@ void UdpClientChannel::RecvPacket(Ptr<Socket> socket){
     Address remoteAddr;
     auto packet = socket->RecvFrom (remoteAddr);
     int sz=packet->GetSize();
-#if defined (PIERO_HEADER_DBUG)
+#if (PIERO_HEADER_DBUG)
     Time delta(0);
     if(!last_packet_time_.IsZero()){
         delta=now-last_packet_time_;
